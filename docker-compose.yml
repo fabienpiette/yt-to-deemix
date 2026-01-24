@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    container_name: ytToDeemix
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    environment:
+      - DEEMIX_URL=${DEEMIX_URL:-http://localhost:6595}
+      - DEEMIX_ARL=${DEEMIX_ARL}
+      - PORT=${PORT:-8080}

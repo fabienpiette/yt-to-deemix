@@ -1,0 +1,22 @@
+# Binary
+ytToDeemix
+ytToDeemix.exe
+
+# Build artifacts
+dist/
+coverage.out
+
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+tmp/
