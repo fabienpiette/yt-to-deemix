@@ -12,7 +12,7 @@ type SearchResult struct {
 
 // Bitrate constants for Deemix queue requests.
 const (
-	BitrateFLAC = 9  // FLAC quality
-	Bitrate320  = 3  // MP3 320kbps
-	Bitrate128  = 1  // MP3 128kbps
+	BitrateFLAC = 9 // FLAC quality
+	Bitrate320  = 3 // MP3 320kbps
+	Bitrate128  = 1 // MP3 128kbps
 )
