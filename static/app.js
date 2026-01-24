@@ -13,8 +13,7 @@
   const countSkipped = document.getElementById("countSkipped");
   const countNotFound = document.getElementById("countNotFound");
   const countTotal = document.getElementById("countTotal");
-  const navCheck = document.getElementById("navCheck");
-  const checkNavidrome = document.getElementById("checkNavidrome");
+  const navToggle = document.getElementById("navCheck");
   const trackTable = document.getElementById("trackTable");
   const trackBody = document.getElementById("trackBody");
   const themeToggle = document.getElementById("themeToggle");
@@ -45,7 +44,7 @@
     if (!url) return;
 
     const bitrate = parseInt(bitrateSelect.value, 10);
-    const navEnabled = checkNavidrome && checkNavidrome.checked;
+    const navEnabled = navToggle && navToggle.classList.contains("active");
     hideError();
     syncBtn.disabled = true;
     clearElement(trackBody);
@@ -208,8 +207,11 @@
   fetch("/api/navidrome/status")
     .then(function (resp) { return resp.json(); })
     .then(function (data) {
-      if (data.configured) {
-        navCheck.style.display = "";
+      if (data.configured && navToggle) {
+        navToggle.style.display = "block";
+        navToggle.addEventListener("click", function () {
+          navToggle.classList.toggle("active");
+        });
       }
     })
     .catch(function () {});
