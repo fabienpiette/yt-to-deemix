@@ -40,6 +40,25 @@ docker compose up -d
 
 Open `http://localhost:8080` in your browser.
 
+## Deploy with Docker Compose
+
+```yaml
+services:
+  yttodeemix:
+    image: ghcr.io/fabienpiette/yttodeemix:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - DEEMIX_URL=http://deemix:6595
+      - DEEMIX_ARL=your_arl_token_here
+      # Optional: Navidrome integration
+      # - NAVIDROME_URL=http://navidrome:4533
+      # - NAVIDROME_USER=admin
+      # - NAVIDROME_PASSWORD=secret
+      # - NAVIDROME_MATCH_MODE=substring
+```
+
 ## Configuration
 
 | Variable | Required | Default | Description |
