@@ -59,7 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image
-        run: docker build -t yttoDeemix:ci .
+        run: docker build -t yttodeemix:ci .
 
   auto-release:
     needs: [test, build]
