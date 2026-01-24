@@ -20,7 +20,8 @@ You have a YouTube playlist or a song link. You want those tracks on your server
 2. yt-dlp fetches the metadata (no video downloads)
 3. Video titles are parsed to extract artist/song (handles most common formats)
 4. Each track is searched on Deezer via your Deemix instance
-5. Matches are auto-queued for download at your chosen bitrate
+5. (Optional) Tracks already in your Navidrome library are skipped
+6. Matches are auto-queued for download at your chosen bitrate
 
 ## Requirements
 
@@ -46,6 +47,12 @@ Open `http://localhost:8080` in your browser.
 | `DEEMIX_URL` | yes | `http://localhost:6595` | Your Deemix instance URL |
 | `DEEMIX_ARL` | yes | - | Deezer ARL authentication token |
 | `PORT` | no | `8080` | Web server port |
+| `NAVIDROME_URL` | no | - | Navidrome/Subsonic instance URL |
+| `NAVIDROME_USER` | no | - | Navidrome username |
+| `NAVIDROME_PASSWORD` | no | - | Navidrome password |
+| `NAVIDROME_MATCH_MODE` | no | `substring` | How to match tracks: `substring`, `exact`, or `fuzzy` |
+
+All three `NAVIDROME_*` connection variables must be set to enable the skip-if-exists feature. When enabled, a checkbox appears in the UI to opt in per sync.
 
 ## Running locally
 
@@ -70,11 +77,24 @@ make build-all      # Cross-compile for all platforms
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/sync` | Start a sync session. Body: `{"url": "...", "bitrate": 1}` |
+| POST | `/api/sync` | Start a sync session. Body: `{"url": "...", "bitrate": 1, "check_navidrome": true}` |
 | GET | `/api/sync/{id}` | Get session state (tracks, progress) |
 | GET | `/api/stats` | Server stats (memory, goroutines, uptime) |
+| GET | `/api/navidrome/status` | Navidrome integration status: `{"configured": true/false}` |
 
 Bitrate values: `9` (FLAC), `3` (320 kbps), `1` (128 kbps).
+
+## Navidrome integration
+
+When configured, ytToDeemix can check your Navidrome library before downloading, skipping tracks you already have. It uses the Subsonic API (`search2` endpoint), so it works with any Subsonic-compatible server.
+
+**Match modes:**
+
+| Mode | Behaviour |
+|------|-----------|
+| `substring` | Title and artist are contained within the Navidrome entry (case-insensitive). Catches variants like "(Remastered)" or "(Official)". |
+| `exact` | Title and artist must match exactly (case-insensitive). Strictest — avoids false positives from short titles. |
+| `fuzzy` | Levenshtein similarity >= 80%. Tolerates minor typos or missing punctuation while rejecting clearly different tracks. |
 
 ## Title parsing
 

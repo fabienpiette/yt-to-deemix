@@ -8,40 +8,47 @@ import (
 	"time"
 
 	"github.com/gndm/ytToDeemix/internal/deemix"
+	"github.com/gndm/ytToDeemix/internal/navidrome"
 	"github.com/gndm/ytToDeemix/internal/parser"
 	"github.com/gndm/ytToDeemix/internal/ytdlp"
 )
 
 // Pipeline manages sync sessions.
 type Pipeline struct {
-	ytClient     ytdlp.Client
-	deemixClient deemix.Client
-	sessions     map[string]*Session
-	mu           sync.RWMutex
-	searchDelay  time.Duration
-	queueDelay   time.Duration
+	ytClient        ytdlp.Client
+	deemixClient    deemix.Client
+	navidromeClient navidrome.Client
+	sessions        map[string]*Session
+	mu              sync.RWMutex
+	searchDelay     time.Duration
+	queueDelay      time.Duration
+	checkDelay      time.Duration
 }
 
 // NewPipeline creates a new sync pipeline with the given clients.
-func NewPipeline(yt ytdlp.Client, dx deemix.Client) *Pipeline {
+// nav can be nil to disable Navidrome checking.
+func NewPipeline(yt ytdlp.Client, dx deemix.Client, nav navidrome.Client) *Pipeline {
 	return &Pipeline{
-		ytClient:     yt,
-		deemixClient: dx,
-		sessions:     make(map[string]*Session),
-		searchDelay:  200 * time.Millisecond,
-		queueDelay:   100 * time.Millisecond,
+		ytClient:        yt,
+		deemixClient:    dx,
+		navidromeClient: nav,
+		sessions:        make(map[string]*Session),
+		searchDelay:     200 * time.Millisecond,
+		queueDelay:      100 * time.Millisecond,
+		checkDelay:      100 * time.Millisecond,
 	}
 }
 
 // Start begins a new sync session for the given playlist URL and bitrate.
 // Returns the session ID immediately; processing runs in a goroutine.
-func (p *Pipeline) Start(ctx context.Context, playlistURL string, bitrate int) string {
+func (p *Pipeline) Start(ctx context.Context, playlistURL string, bitrate int, checkNavidrome bool) string {
 	id := generateID()
 	session := &Session{
-		ID:      id,
-		URL:     playlistURL,
-		Status:  StatusFetching,
-		Bitrate: bitrate,
+		ID:             id,
+		URL:            playlistURL,
+		Status:         StatusFetching,
+		Bitrate:        bitrate,
+		CheckNavidrome: checkNavidrome,
 	}
 
 	p.mu.Lock()
@@ -123,6 +130,40 @@ func (p *Pipeline) run(ctx context.Context, session *Session) {
 		}
 	}
 
+	// Phase 3.5: Check Navidrome for existing tracks.
+	if p.navidromeClient != nil && session.CheckNavidrome {
+		p.mu.Lock()
+		session.Status = StatusChecking
+		p.mu.Unlock()
+
+		for i := range session.Tracks {
+			if ctx.Err() != nil {
+				p.setError(session, "canceled")
+				return
+			}
+
+			p.mu.RLock()
+			track := session.Tracks[i]
+			p.mu.RUnlock()
+
+			if track.DeezerMatch == nil {
+				continue
+			}
+
+			results, err := p.navidromeClient.Search(ctx, track.ParsedArtist, track.ParsedSong)
+			if err == nil && len(results) > 0 {
+				p.mu.Lock()
+				session.Tracks[i].Status = TrackSkipped
+				session.Progress.Skipped++
+				p.mu.Unlock()
+			}
+
+			if i < len(session.Tracks)-1 {
+				time.Sleep(p.checkDelay)
+			}
+		}
+	}
+
 	// Phase 4: Queue all found tracks.
 	p.mu.Lock()
 	session.Status = StatusQueuing
@@ -138,7 +179,7 @@ func (p *Pipeline) run(ctx context.Context, session *Session) {
 		track := session.Tracks[i]
 		p.mu.RUnlock()
 
-		if track.DeezerMatch == nil {
+		if track.DeezerMatch == nil || track.Status == TrackSkipped {
 			continue
 		}
 

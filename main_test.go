@@ -36,7 +36,7 @@ func testPipeline() *sync.Pipeline {
 			{Title: "Artist - Song", VideoID: "abc"},
 		},
 	}
-	return sync.NewPipeline(yt, &mockDX{})
+	return sync.NewPipeline(yt, &mockDX{}, nil)
 }
 
 func TestHandleSyncValid(t *testing.T) {
@@ -111,7 +111,7 @@ func TestHandleGetSession(t *testing.T) {
 	pipeline := testPipeline()
 
 	// Start a session.
-	id := pipeline.Start(context.Background(), "https://youtube.com/playlist?list=test", deemix.Bitrate320)
+	id := pipeline.Start(context.Background(), "https://youtube.com/playlist?list=test", deemix.Bitrate320, false)
 
 	// Wait for completion.
 	time.Sleep(100 * time.Millisecond)
@@ -167,6 +167,38 @@ func TestHandleStats(t *testing.T) {
 	}
 	if stats.Goroutines == 0 {
 		t.Error("expected non-zero goroutines")
+	}
+}
+
+func TestHandleNavidromeStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured bool
+		want       bool
+	}{
+		{"configured", true, true},
+		{"not configured", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := handleNavidromeStatus(tt.configured)
+			req := httptest.NewRequest(http.MethodGet, "/api/navidrome/status", nil)
+			w := httptest.NewRecorder()
+
+			handler(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200", w.Code)
+			}
+
+			var resp navidromeStatusResponse
+			if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+				t.Fatal(err)
+			}
+			if resp.Configured != tt.want {
+				t.Errorf("configured = %v, want %v", resp.Configured, tt.want)
+			}
+		})
 	}
 }
 

@@ -10,8 +10,11 @@
   const phaseEl = document.getElementById("phase");
   const countSearched = document.getElementById("countSearched");
   const countQueued = document.getElementById("countQueued");
+  const countSkipped = document.getElementById("countSkipped");
   const countNotFound = document.getElementById("countNotFound");
   const countTotal = document.getElementById("countTotal");
+  const navCheck = document.getElementById("navCheck");
+  const checkNavidrome = document.getElementById("checkNavidrome");
   const trackTable = document.getElementById("trackTable");
   const trackBody = document.getElementById("trackBody");
   const themeToggle = document.getElementById("themeToggle");
@@ -42,6 +45,7 @@
     if (!url) return;
 
     const bitrate = parseInt(bitrateSelect.value, 10);
+    const navEnabled = checkNavidrome && checkNavidrome.checked;
     hideError();
     syncBtn.disabled = true;
     clearElement(trackBody);
@@ -51,7 +55,7 @@
     fetch("/api/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: url, bitrate: bitrate }),
+      body: JSON.stringify({ url: url, bitrate: bitrate, check_navidrome: navEnabled }),
     })
       .then(function (resp) {
         if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.error); });
@@ -101,6 +105,7 @@
     phaseEl.textContent = session.status;
     countSearched.textContent = session.progress.searched;
     countQueued.textContent = session.progress.queued;
+    countSkipped.textContent = session.progress.skipped;
     countNotFound.textContent = session.progress.not_found;
     countTotal.textContent = session.progress.total;
 
@@ -151,6 +156,7 @@
       case "searching": return "\u22EF";
       case "found":
       case "queued": return "\u2713";
+      case "skipped": return "\u2205";
       case "not_found": return "\u2717";
       case "error": return "!";
       default: return "\u2014";
@@ -197,6 +203,16 @@
     if (m > 0) return m + "m";
     return Math.floor(sec) + "s";
   }
+
+  // Check Navidrome availability.
+  fetch("/api/navidrome/status")
+    .then(function (resp) { return resp.json(); })
+    .then(function (data) {
+      if (data.configured) {
+        navCheck.style.display = "";
+      }
+    })
+    .catch(function () {});
 
   fetchStats();
   setInterval(fetchStats, 10000);

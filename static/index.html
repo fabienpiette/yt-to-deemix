@@ -23,6 +23,9 @@
       </select>
       <button type="submit" id="syncBtn">sync</button>
     </form>
+    <label class="nav-check" id="navCheck" style="display:none">
+      <input type="checkbox" id="checkNavidrome"> skip if in navidrome
+    </label>
 
     <div class="error-msg" id="errorMsg"></div>
 
@@ -31,6 +34,7 @@
       <div class="counts">
         <span>searched: <strong id="countSearched">0</strong></span>
         <span>queued: <strong id="countQueued">0</strong></span>
+        <span>skipped: <strong id="countSkipped">0</strong></span>
         <span>not found: <strong id="countNotFound">0</strong></span>
         <span>total: <strong id="countTotal">0</strong></span>
       </div>

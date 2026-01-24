@@ -103,7 +103,21 @@ button:disabled {
 .sync-form {
   display: flex;
   gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.nav-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--muted);
   margin-bottom: 2rem;
+  cursor: pointer;
+}
+
+.nav-check input[type="checkbox"] {
+  cursor: pointer;
 }
 
 .progress {

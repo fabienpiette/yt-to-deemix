@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gndm/ytToDeemix/internal/deemix"
+	"github.com/gndm/ytToDeemix/internal/navidrome"
 	"github.com/gndm/ytToDeemix/internal/sync"
 	"github.com/gndm/ytToDeemix/internal/ytdlp"
 )
@@ -43,12 +44,31 @@ func main() {
 		log.Printf("Logged in to Deemix at %s", deemixURL)
 	}
 
-	pipeline := sync.NewPipeline(ytClient, dxClient)
+	// Optional Navidrome integration.
+	var navClient navidrome.Client
+	navURL := os.Getenv("NAVIDROME_URL")
+	navUser := os.Getenv("NAVIDROME_USER")
+	navPass := os.Getenv("NAVIDROME_PASSWORD")
+	navMatchMode := os.Getenv("NAVIDROME_MATCH_MODE")
+	if navURL != "" && navUser != "" && navPass != "" {
+		navClient = &navidrome.HTTPClient{
+			BaseURL:   navURL,
+			User:      navUser,
+			Password:  navPass,
+			MatchMode: navMatchMode,
+		}
+		log.Printf("Navidrome integration enabled at %s (match: %s)", navURL, effectiveMatchMode(navMatchMode))
+	}
+
+	navidromeConfigured := navClient != nil
+
+	pipeline := sync.NewPipeline(ytClient, dxClient, navClient)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/sync", handleSync(pipeline))
 	mux.HandleFunc("GET /api/sync/{id}", handleGetSession(pipeline))
 	mux.HandleFunc("GET /api/stats", handleStats)
+	mux.HandleFunc("GET /api/navidrome/status", handleNavidromeStatus(navidromeConfigured))
 	mux.Handle("GET /", http.FileServer(http.Dir("static")))
 
 	log.Printf("Starting server on :%s", port)
@@ -58,8 +78,9 @@ func main() {
 }
 
 type syncRequest struct {
-	URL     string `json:"url"`
-	Bitrate int    `json:"bitrate"`
+	URL            string `json:"url"`
+	Bitrate        int    `json:"bitrate"`
+	CheckNavidrome bool   `json:"check_navidrome"`
 }
 
 type syncResponse struct {
@@ -85,7 +106,7 @@ func handleSync(pipeline *sync.Pipeline) http.HandlerFunc {
 			req.Bitrate = deemix.Bitrate128
 		}
 
-		id := pipeline.Start(context.Background(), req.URL, req.Bitrate)
+		id := pipeline.Start(context.Background(), req.URL, req.Bitrate, req.CheckNavidrome)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(syncResponse{SessionID: id})
@@ -124,6 +145,24 @@ func handleStats(w http.ResponseWriter, _ *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+
+type navidromeStatusResponse struct {
+	Configured bool `json:"configured"`
+}
+
+func handleNavidromeStatus(configured bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(navidromeStatusResponse{Configured: configured})
+	}
+}
+
+func effectiveMatchMode(mode string) string {
+	if mode == "" {
+		return navidrome.MatchSubstring
+	}
+	return mode
 }
 
 func isValidYouTubeURL(url string) bool {
