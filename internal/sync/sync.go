@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"sync"
 	"time"
 
@@ -55,6 +56,7 @@ func (p *Pipeline) Start(ctx context.Context, playlistURL string, bitrate int, c
 	p.sessions[id] = session
 	p.mu.Unlock()
 
+	log.Printf("[sync] session %s started: %s", id, playlistURL)
 	go p.run(ctx, session)
 	return id
 }
@@ -199,6 +201,8 @@ func (p *Pipeline) run(ctx context.Context, session *Session) {
 
 	p.mu.Lock()
 	session.Status = StatusDone
+	log.Printf("[sync] session %s done: %d queued, %d skipped, %d not found",
+		session.ID, session.Progress.Queued, session.Progress.Skipped, session.Progress.NotFound)
 	p.mu.Unlock()
 }
 
@@ -206,6 +210,7 @@ func (p *Pipeline) setError(session *Session, msg string) {
 	p.mu.Lock()
 	session.Status = StatusError
 	session.Error = msg
+	log.Printf("[sync] session %s error: %s", session.ID, msg)
 	p.mu.Unlock()
 }
 

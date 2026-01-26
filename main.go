@@ -194,10 +194,12 @@ func handleChannelPlaylists(ytClient *ytdlp.CommandClient) http.HandlerFunc {
 
 		playlists, err := ytClient.GetChannelPlaylists(r.Context(), url)
 		if err != nil {
+			log.Printf("[channel] failed to fetch playlists from %s: %v", url, err)
 			http.Error(w, `{"error":"failed to fetch channel playlists"}`, http.StatusInternalServerError)
 			return
 		}
 
+		log.Printf("[channel] fetched %d playlists from %s", len(playlists), url)
 		resp := channelPlaylistsResponse{Playlists: make([]playlistInfo, len(playlists))}
 		for i, p := range playlists {
 			resp.Playlists[i] = playlistInfo{ID: p.ID, Title: p.Title, URL: p.URL}
