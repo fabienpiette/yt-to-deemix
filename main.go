@@ -61,6 +61,7 @@ func main() {
 	}
 
 	navidromeConfigured := navClient != nil
+	navidromeSkipDefault := os.Getenv("NAVIDROME_SKIP_DEFAULT") == "true"
 
 	pipeline := sync.NewPipeline(ytClient, dxClient, navClient)
 
@@ -70,7 +71,7 @@ func main() {
 	mux.HandleFunc("GET /api/channel/playlists", handleChannelPlaylists(ytClient))
 	mux.HandleFunc("GET /api/url/info", handleURLInfo(ytClient))
 	mux.HandleFunc("GET /api/stats", handleStats)
-	mux.HandleFunc("GET /api/navidrome/status", handleNavidromeStatus(navidromeConfigured))
+	mux.HandleFunc("GET /api/navidrome/status", handleNavidromeStatus(navidromeConfigured, navidromeSkipDefault))
 	mux.Handle("GET /", http.FileServer(http.Dir("static")))
 
 	log.Printf("Starting server on :%s", port)
@@ -150,13 +151,14 @@ func handleStats(w http.ResponseWriter, _ *http.Request) {
 }
 
 type navidromeStatusResponse struct {
-	Configured bool `json:"configured"`
+	Configured  bool `json:"configured"`
+	SkipDefault bool `json:"skip_default"`
 }
 
-func handleNavidromeStatus(configured bool) http.HandlerFunc {
+func handleNavidromeStatus(configured, skipDefault bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(navidromeStatusResponse{Configured: configured})
+		json.NewEncoder(w).Encode(navidromeStatusResponse{Configured: configured, SkipDefault: skipDefault})
 	}
 }
 

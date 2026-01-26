@@ -372,6 +372,9 @@
     .then(function (data) {
       if (data.configured && navToggle) {
         navToggle.style.display = "block";
+        if (data.skip_default) {
+          navToggle.classList.add("active");
+        }
         navToggle.addEventListener("click", function () {
           navToggle.classList.toggle("active");
         });

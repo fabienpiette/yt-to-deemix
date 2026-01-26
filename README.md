@@ -70,8 +70,9 @@ services:
 | `NAVIDROME_USER` | no | - | Navidrome username |
 | `NAVIDROME_PASSWORD` | no | - | Navidrome password |
 | `NAVIDROME_MATCH_MODE` | no | `substring` | How to match tracks: `substring`, `exact`, or `fuzzy` |
+| `NAVIDROME_SKIP_DEFAULT` | no | `false` | Enable "skip existing" toggle by default |
 
-All three `NAVIDROME_*` connection variables must be set to enable the skip-if-exists feature. When enabled, a checkbox appears in the UI to opt in per sync.
+All three `NAVIDROME_*` connection variables must be set to enable the skip-if-exists feature. When enabled, a toggle appears in the UI to opt in per sync.
 
 ## Running locally
 

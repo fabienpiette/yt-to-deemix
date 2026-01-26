@@ -172,16 +172,17 @@ func TestHandleStats(t *testing.T) {
 
 func TestHandleNavidromeStatus(t *testing.T) {
 	tests := []struct {
-		name       string
-		configured bool
-		want       bool
+		name        string
+		configured  bool
+		skipDefault bool
 	}{
-		{"configured", true, true},
+		{"configured with skip", true, true},
+		{"configured without skip", true, false},
 		{"not configured", false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := handleNavidromeStatus(tt.configured)
+			handler := handleNavidromeStatus(tt.configured, tt.skipDefault)
 			req := httptest.NewRequest(http.MethodGet, "/api/navidrome/status", nil)
 			w := httptest.NewRecorder()
 
@@ -195,8 +196,11 @@ func TestHandleNavidromeStatus(t *testing.T) {
 			if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 				t.Fatal(err)
 			}
-			if resp.Configured != tt.want {
-				t.Errorf("configured = %v, want %v", resp.Configured, tt.want)
+			if resp.Configured != tt.configured {
+				t.Errorf("configured = %v, want %v", resp.Configured, tt.configured)
+			}
+			if resp.SkipDefault != tt.skipDefault {
+				t.Errorf("skip_default = %v, want %v", resp.SkipDefault, tt.skipDefault)
 			}
 		})
 	}
