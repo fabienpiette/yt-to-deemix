@@ -55,13 +55,54 @@
       return;
     }
     hideError();
-    urlQueue.push(url);
-    urlInput.value = "";
-    renderQueue();
+
+    if (isChannelURL(url)) {
+      fetchChannelPlaylists(url);
+    } else {
+      urlQueue.push(url);
+      urlInput.value = "";
+      renderQueue();
+    }
   }
 
   function isValidURL(url) {
     return url.indexOf("youtube.com") !== -1 || url.indexOf("youtu.be") !== -1;
+  }
+
+  function isChannelURL(url) {
+    return url.indexOf("youtube.com/@") !== -1 ||
+           url.indexOf("youtube.com/channel/") !== -1 ||
+           url.indexOf("youtube.com/c/") !== -1 ||
+           url.indexOf("youtube.com/user/") !== -1;
+  }
+
+  function fetchChannelPlaylists(channelURL) {
+    addBtn.disabled = true;
+    addBtn.textContent = "loading...";
+
+    fetch("/api/channel/playlists?url=" + encodeURIComponent(channelURL))
+      .then(function (resp) {
+        if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.error); });
+        return resp.json();
+      })
+      .then(function (data) {
+        if (data.playlists && data.playlists.length > 0) {
+          for (var i = 0; i < data.playlists.length; i++) {
+            urlQueue.push(data.playlists[i].url);
+          }
+          renderQueue();
+        } else {
+          showError("No playlists found on this channel");
+        }
+        urlInput.value = "";
+      })
+      .catch(function (err) {
+        showError(err.message || "Failed to fetch channel playlists");
+      })
+      .finally(function () {
+        addBtn.disabled = false;
+        addBtn.textContent = "add";
+      });
   }
 
   function removeFromQueue(index) {

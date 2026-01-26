@@ -219,3 +219,24 @@ func TestIsValidPlaylistURL(t *testing.T) {
 		}
 	}
 }
+
+func TestIsChannelURL(t *testing.T) {
+	tests := []struct {
+		url  string
+		want bool
+	}{
+		{"https://www.youtube.com/@username", true},
+		{"https://youtube.com/@username/videos", true},
+		{"https://www.youtube.com/channel/UCxxxx", true},
+		{"https://www.youtube.com/c/ChannelName", true},
+		{"https://www.youtube.com/user/username", true},
+		{"https://www.youtube.com/playlist?list=PLxxxx", false},
+		{"https://youtu.be/abc123", false},
+		{"https://example.com/@user", false},
+	}
+	for _, tt := range tests {
+		if got := isChannelURL(tt.url); got != tt.want {
+			t.Errorf("isChannelURL(%q) = %v, want %v", tt.url, got, tt.want)
+		}
+	}
+}

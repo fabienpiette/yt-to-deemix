@@ -67,6 +67,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/sync", handleSync(pipeline))
 	mux.HandleFunc("GET /api/sync/{id}", handleGetSession(pipeline))
+	mux.HandleFunc("GET /api/channel/playlists", handleChannelPlaylists(ytClient))
 	mux.HandleFunc("GET /api/stats", handleStats)
 	mux.HandleFunc("GET /api/navidrome/status", handleNavidromeStatus(navidromeConfigured))
 	mux.Handle("GET /", http.FileServer(http.Dir("static")))
@@ -167,4 +168,49 @@ func effectiveMatchMode(mode string) string {
 
 func isValidYouTubeURL(url string) bool {
 	return strings.Contains(url, "youtube.com") || strings.Contains(url, "youtu.be")
+}
+
+type channelPlaylistsResponse struct {
+	Playlists []playlistInfo `json:"playlists"`
+}
+
+type playlistInfo struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
+func handleChannelPlaylists(ytClient *ytdlp.CommandClient) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		url := r.URL.Query().Get("url")
+		if url == "" {
+			http.Error(w, `{"error":"url query parameter is required"}`, http.StatusBadRequest)
+			return
+		}
+		if !isChannelURL(url) {
+			http.Error(w, `{"error":"invalid YouTube channel URL"}`, http.StatusBadRequest)
+			return
+		}
+
+		playlists, err := ytClient.GetChannelPlaylists(r.Context(), url)
+		if err != nil {
+			http.Error(w, `{"error":"failed to fetch channel playlists"}`, http.StatusInternalServerError)
+			return
+		}
+
+		resp := channelPlaylistsResponse{Playlists: make([]playlistInfo, len(playlists))}
+		for i, p := range playlists {
+			resp.Playlists[i] = playlistInfo{ID: p.ID, Title: p.Title, URL: p.URL}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func isChannelURL(url string) bool {
+	return strings.Contains(url, "youtube.com/@") ||
+		strings.Contains(url, "youtube.com/channel/") ||
+		strings.Contains(url, "youtube.com/c/") ||
+		strings.Contains(url, "youtube.com/user/")
 }
