@@ -13,6 +13,7 @@
   var countSearched = document.getElementById("countSearched");
   var countQueued = document.getElementById("countQueued");
   var countSkipped = document.getElementById("countSkipped");
+  var countReview = document.getElementById("countReview");
   var countNotFound = document.getElementById("countNotFound");
   var countTotal = document.getElementById("countTotal");
   var navToggle = document.getElementById("navCheck");
@@ -260,16 +261,17 @@
     countSearched.textContent = session.progress.searched;
     countQueued.textContent = session.progress.queued;
     countSkipped.textContent = session.progress.skipped;
+    countReview.textContent = session.progress.needs_review;
     countNotFound.textContent = session.progress.not_found;
     countTotal.textContent = session.progress.total;
 
     if (session.tracks && session.tracks.length > 0) {
       trackTable.classList.add("active");
-      renderTracks(session.tracks);
+      renderTracks(session.tracks, session.id);
     }
   }
 
-  function renderTracks(tracks) {
+  function renderTracks(tracks, sid) {
     clearElement(trackBody);
     for (var i = 0; i < tracks.length; i++) {
       var tr = document.createElement("tr");
@@ -288,14 +290,44 @@
 
       var tdResult = document.createElement("td");
       if (t.deezer_match) {
-        tdResult.textContent = t.deezer_match.artist + " - " + t.deezer_match.title;
+        var resultText = t.deezer_match.artist + " - " + t.deezer_match.title;
+        if (t.confidence > 0) {
+          resultText += " (" + t.confidence + "%)";
+        }
+        tdResult.textContent = resultText;
       } else {
         tdResult.textContent = "\u2014";
       }
 
       var tdStatus = document.createElement("td");
       tdStatus.className = "status-icon";
-      tdStatus.textContent = statusIcon(t.status);
+
+      if (t.status === "needs_review") {
+        var approveBtn = document.createElement("button");
+        approveBtn.className = "review-btn approve";
+        approveBtn.textContent = "\u2713";
+        approveBtn.title = "Approve and queue";
+        approveBtn.dataset.index = i;
+        approveBtn.dataset.sid = sid;
+        approveBtn.addEventListener("click", function () {
+          approveTrack(this.dataset.sid, parseInt(this.dataset.index, 10));
+        });
+
+        var rejectBtn = document.createElement("button");
+        rejectBtn.className = "review-btn reject";
+        rejectBtn.textContent = "\u2717";
+        rejectBtn.title = "Reject match";
+        rejectBtn.dataset.index = i;
+        rejectBtn.dataset.sid = sid;
+        rejectBtn.addEventListener("click", function () {
+          rejectTrack(this.dataset.sid, parseInt(this.dataset.index, 10));
+        });
+
+        tdStatus.appendChild(approveBtn);
+        tdStatus.appendChild(rejectBtn);
+      } else {
+        tdStatus.textContent = statusIcon(t.status);
+      }
 
       tr.appendChild(tdTitle);
       tr.appendChild(tdMatched);
@@ -305,12 +337,35 @@
     }
   }
 
+  function approveTrack(sid, index) {
+    fetch("/api/sync/" + sid + "/track/" + index + "/approve", { method: "POST" })
+      .then(function (resp) {
+        if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.error); });
+        pollSession();
+      })
+      .catch(function (err) {
+        showError(err.message || "Failed to approve track");
+      });
+  }
+
+  function rejectTrack(sid, index) {
+    fetch("/api/sync/" + sid + "/track/" + index + "/reject", { method: "POST" })
+      .then(function (resp) {
+        if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.error); });
+        pollSession();
+      })
+      .catch(function (err) {
+        showError(err.message || "Failed to reject track");
+      });
+  }
+
   function statusIcon(status) {
     switch (status) {
       case "searching": return "\u22EF";
       case "found":
       case "queued": return "\u2713";
       case "skipped": return "\u2205";
+      case "needs_review": return "?";
       case "not_found": return "\u2717";
       case "error": return "!";
       default: return "\u2014";
@@ -332,6 +387,7 @@
     countSearched.textContent = "0";
     countQueued.textContent = "0";
     countSkipped.textContent = "0";
+    countReview.textContent = "0";
     countNotFound.textContent = "0";
     countTotal.textContent = "0";
   }

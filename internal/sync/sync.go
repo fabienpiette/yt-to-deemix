@@ -14,30 +14,47 @@ import (
 	"github.com/gndm/ytToDeemix/internal/ytdlp"
 )
 
+// Default confidence threshold (0-100).
+const DefaultConfidenceThreshold = 70
+
 // Pipeline manages sync sessions.
 type Pipeline struct {
-	ytClient        ytdlp.Client
-	deemixClient    deemix.Client
-	navidromeClient navidrome.Client
-	sessions        map[string]*Session
-	mu              sync.RWMutex
-	searchDelay     time.Duration
-	queueDelay      time.Duration
-	checkDelay      time.Duration
+	ytClient            ytdlp.Client
+	deemixClient        deemix.Client
+	navidromeClient     navidrome.Client
+	sessions            map[string]*Session
+	mu                  sync.RWMutex
+	searchDelay         time.Duration
+	queueDelay          time.Duration
+	checkDelay          time.Duration
+	confidenceThreshold int
 }
 
 // NewPipeline creates a new sync pipeline with the given clients.
 // nav can be nil to disable Navidrome checking.
 func NewPipeline(yt ytdlp.Client, dx deemix.Client, nav navidrome.Client) *Pipeline {
 	return &Pipeline{
-		ytClient:        yt,
-		deemixClient:    dx,
-		navidromeClient: nav,
-		sessions:        make(map[string]*Session),
-		searchDelay:     200 * time.Millisecond,
-		queueDelay:      100 * time.Millisecond,
-		checkDelay:      100 * time.Millisecond,
+		ytClient:            yt,
+		deemixClient:        dx,
+		navidromeClient:     nav,
+		sessions:            make(map[string]*Session),
+		searchDelay:         200 * time.Millisecond,
+		queueDelay:          100 * time.Millisecond,
+		checkDelay:          100 * time.Millisecond,
+		confidenceThreshold: DefaultConfidenceThreshold,
 	}
+}
+
+// SetConfidenceThreshold sets the minimum confidence score (0-100) for auto-queuing.
+// Tracks below this threshold will be marked as needs_review.
+func (p *Pipeline) SetConfidenceThreshold(threshold int) {
+	if threshold < 0 {
+		threshold = 0
+	}
+	if threshold > 100 {
+		threshold = 100
+	}
+	p.confidenceThreshold = threshold
 }
 
 // Start begins a new sync session for the given playlist URL and bitrate.
@@ -122,7 +139,22 @@ func (p *Pipeline) run(ctx context.Context, session *Session) {
 		} else {
 			match := results[0]
 			session.Tracks[i].DeezerMatch = &match
-			session.Tracks[i].Status = TrackFound
+
+			// Calculate confidence score.
+			confidence := calculateConfidence(
+				session.Tracks[i].ParsedArtist,
+				session.Tracks[i].ParsedSong,
+				match.Artist,
+				match.Title,
+			)
+			session.Tracks[i].Confidence = confidence
+
+			if confidence >= p.confidenceThreshold {
+				session.Tracks[i].Status = TrackFound
+			} else {
+				session.Tracks[i].Status = TrackNeedsReview
+				session.Progress.NeedsReview++
+			}
 		}
 		session.Progress.Searched++
 		p.mu.Unlock()
@@ -181,7 +213,7 @@ func (p *Pipeline) run(ctx context.Context, session *Session) {
 		track := session.Tracks[i]
 		p.mu.RUnlock()
 
-		if track.DeezerMatch == nil || track.Status == TrackSkipped {
+		if track.DeezerMatch == nil || track.Status == TrackSkipped || track.Status == TrackNeedsReview {
 			continue
 		}
 
@@ -201,8 +233,8 @@ func (p *Pipeline) run(ctx context.Context, session *Session) {
 
 	p.mu.Lock()
 	session.Status = StatusDone
-	log.Printf("[sync] session %s done: %d queued, %d skipped, %d not found",
-		session.ID, session.Progress.Queued, session.Progress.Skipped, session.Progress.NotFound)
+	log.Printf("[sync] session %s done: %d queued, %d skipped, %d needs review, %d not found",
+		session.ID, session.Progress.Queued, session.Progress.Skipped, session.Progress.NeedsReview, session.Progress.NotFound)
 	p.mu.Unlock()
 }
 
@@ -225,4 +257,67 @@ func generateID() string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// ApproveTrack queues a track that was marked as needs_review.
+// Returns an error if the track doesn't exist or isn't in needs_review status.
+func (p *Pipeline) ApproveTrack(ctx context.Context, sessionID string, trackIndex int) error {
+	p.mu.Lock()
+	session, ok := p.sessions[sessionID]
+	if !ok {
+		p.mu.Unlock()
+		return ErrSessionNotFound
+	}
+	if trackIndex < 0 || trackIndex >= len(session.Tracks) {
+		p.mu.Unlock()
+		return ErrTrackNotFound
+	}
+	track := session.Tracks[trackIndex]
+	if track.Status != TrackNeedsReview {
+		p.mu.Unlock()
+		return ErrTrackNotReviewable
+	}
+	if track.DeezerMatch == nil {
+		p.mu.Unlock()
+		return ErrNoMatch
+	}
+	p.mu.Unlock()
+
+	// Queue the track.
+	err := p.deemixClient.AddToQueue(ctx, track.DeezerMatch.Link, session.Bitrate)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err != nil {
+		session.Tracks[trackIndex].Status = TrackError
+		return err
+	}
+	session.Tracks[trackIndex].Status = TrackQueued
+	session.Progress.Queued++
+	session.Progress.NeedsReview--
+	log.Printf("[sync] session %s: track %d approved and queued", sessionID, trackIndex)
+	return nil
+}
+
+// RejectTrack marks a needs_review track as rejected (not_found).
+func (p *Pipeline) RejectTrack(sessionID string, trackIndex int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	session, ok := p.sessions[sessionID]
+	if !ok {
+		return ErrSessionNotFound
+	}
+	if trackIndex < 0 || trackIndex >= len(session.Tracks) {
+		return ErrTrackNotFound
+	}
+	if session.Tracks[trackIndex].Status != TrackNeedsReview {
+		return ErrTrackNotReviewable
+	}
+
+	session.Tracks[trackIndex].Status = TrackNotFound
+	session.Progress.NeedsReview--
+	session.Progress.NotFound++
+	log.Printf("[sync] session %s: track %d rejected", sessionID, trackIndex)
+	return nil
 }

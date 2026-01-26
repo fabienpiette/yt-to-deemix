@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,9 +66,19 @@ func main() {
 
 	pipeline := sync.NewPipeline(ytClient, dxClient, navClient)
 
+	// Optional confidence threshold.
+	if thresholdStr := os.Getenv("CONFIDENCE_THRESHOLD"); thresholdStr != "" {
+		if threshold, err := strconv.Atoi(thresholdStr); err == nil {
+			pipeline.SetConfidenceThreshold(threshold)
+			log.Printf("Confidence threshold set to %d%%", threshold)
+		}
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/sync", handleSync(pipeline))
 	mux.HandleFunc("GET /api/sync/{id}", handleGetSession(pipeline))
+	mux.HandleFunc("POST /api/sync/{id}/track/{index}/approve", handleApproveTrack(pipeline))
+	mux.HandleFunc("POST /api/sync/{id}/track/{index}/reject", handleRejectTrack(pipeline))
 	mux.HandleFunc("GET /api/channel/playlists", handleChannelPlaylists(ytClient))
 	mux.HandleFunc("GET /api/url/info", handleURLInfo(ytClient))
 	mux.HandleFunc("GET /api/stats", handleStats)
@@ -250,4 +261,62 @@ func isChannelURL(url string) bool {
 		strings.Contains(url, "youtube.com/c/") ||
 		strings.Contains(url, "youtube.com/user/") ||
 		strings.Contains(url, "youtube.com/browse/")
+}
+
+func handleApproveTrack(pipeline *sync.Pipeline) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID := r.PathValue("id")
+		indexStr := r.PathValue("index")
+		index, err := strconv.Atoi(indexStr)
+		if err != nil {
+			http.Error(w, `{"error":"invalid track index"}`, http.StatusBadRequest)
+			return
+		}
+
+		if err := pipeline.ApproveTrack(r.Context(), sessionID, index); err != nil {
+			switch err {
+			case sync.ErrSessionNotFound:
+				http.Error(w, `{"error":"session not found"}`, http.StatusNotFound)
+			case sync.ErrTrackNotFound:
+				http.Error(w, `{"error":"track not found"}`, http.StatusNotFound)
+			case sync.ErrTrackNotReviewable:
+				http.Error(w, `{"error":"track is not in needs_review status"}`, http.StatusBadRequest)
+			default:
+				http.Error(w, `{"error":"failed to queue track"}`, http.StatusInternalServerError)
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"queued"}`))
+	}
+}
+
+func handleRejectTrack(pipeline *sync.Pipeline) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID := r.PathValue("id")
+		indexStr := r.PathValue("index")
+		index, err := strconv.Atoi(indexStr)
+		if err != nil {
+			http.Error(w, `{"error":"invalid track index"}`, http.StatusBadRequest)
+			return
+		}
+
+		if err := pipeline.RejectTrack(sessionID, index); err != nil {
+			switch err {
+			case sync.ErrSessionNotFound:
+				http.Error(w, `{"error":"session not found"}`, http.StatusNotFound)
+			case sync.ErrTrackNotFound:
+				http.Error(w, `{"error":"track not found"}`, http.StatusNotFound)
+			case sync.ErrTrackNotReviewable:
+				http.Error(w, `{"error":"track is not in needs_review status"}`, http.StatusBadRequest)
+			default:
+				http.Error(w, `{"error":"failed to reject track"}`, http.StatusInternalServerError)
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"rejected"}`))
+	}
 }

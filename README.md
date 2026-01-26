@@ -66,6 +66,7 @@ services:
 | `DEEMIX_URL` | yes | `http://localhost:6595` | Your Deemix instance URL |
 | `DEEMIX_ARL` | yes | - | Deezer ARL authentication token |
 | `PORT` | no | `8080` | Web server port |
+| `CONFIDENCE_THRESHOLD` | no | `70` | Minimum confidence score (0-100) for auto-queuing |
 | `NAVIDROME_URL` | no | - | Navidrome/Subsonic instance URL |
 | `NAVIDROME_USER` | no | - | Navidrome username |
 | `NAVIDROME_PASSWORD` | no | - | Navidrome password |
@@ -115,6 +116,20 @@ When configured, ytToDeemix can check your Navidrome library before downloading,
 | `substring` | Title and artist are contained within the Navidrome entry (case-insensitive). Catches variants like "(Remastered)" or "(Official)". |
 | `exact` | Title and artist must match exactly (case-insensitive). Strictest — avoids false positives from short titles. |
 | `fuzzy` | Levenshtein similarity >= 80%. Tolerates minor typos or missing punctuation while rejecting clearly different tracks. |
+
+## Confidence scoring
+
+Each Deezer match is assigned a confidence score (0-100%) based on how well the artist and title match. Tracks below the threshold are flagged for manual review instead of being auto-queued.
+
+- **High confidence** (≥70% by default): Auto-queued
+- **Low confidence** (<70%): Shows approve/reject buttons in the UI
+
+This prevents incorrect downloads when the parser extracts the wrong artist (or no artist at all). For example, a video titled "I'm Alive" without artist info might match Céline Dion's version instead of Anthrax — the confidence score catches this mismatch.
+
+Scoring formula:
+- 40% weight on artist name similarity
+- 60% weight on title similarity
+- If no artist was parsed, max confidence is capped at 60%
 
 ## Title parsing
 

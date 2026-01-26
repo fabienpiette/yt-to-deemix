@@ -250,6 +250,31 @@ button:disabled {
 
 .status-icon {
   font-family: inherit;
+  white-space: nowrap;
+}
+
+.review-btn {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  margin-right: 0.3rem;
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.review-btn:hover {
+  color: var(--fg);
+  border-color: var(--fg);
+}
+
+.review-btn.approve:hover {
+  color: #2a2;
+  border-color: #2a2;
+}
+
+.review-btn.reject:hover {
+  color: #a22;
+  border-color: #a22;
 }
 
 .error-msg {
