@@ -135,6 +135,13 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.url-queue .url-text:hover {
+  color: var(--fg);
+  text-decoration: underline;
 }
 
 .url-queue .remove-btn {

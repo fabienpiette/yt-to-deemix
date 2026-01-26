@@ -59,7 +59,7 @@
     if (isChannelURL(url)) {
       fetchChannelPlaylists(url);
     } else {
-      urlQueue.push(url);
+      urlQueue.push({ url: url, title: null });
       urlInput.value = "";
       renderQueue();
     }
@@ -88,7 +88,7 @@
       .then(function (data) {
         if (data.playlists && data.playlists.length > 0) {
           for (var i = 0; i < data.playlists.length; i++) {
-            urlQueue.push(data.playlists[i].url);
+            urlQueue.push({ url: data.playlists[i].url, title: data.playlists[i].title });
           }
           renderQueue();
         } else {
@@ -113,12 +113,16 @@
   function renderQueue() {
     clearElement(urlQueueEl);
     for (var i = 0; i < urlQueue.length; i++) {
+      var item = urlQueue[i];
       var li = document.createElement("li");
 
-      var span = document.createElement("span");
-      span.className = "url-text";
-      span.textContent = urlQueue[i];
-      span.title = urlQueue[i];
+      var link = document.createElement("a");
+      link.className = "url-text";
+      link.href = item.url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = item.title || item.url;
+      link.title = item.url;
 
       var btn = document.createElement("button");
       btn.className = "remove-btn";
@@ -128,7 +132,7 @@
         removeFromQueue(parseInt(this.dataset.index, 10));
       });
 
-      li.appendChild(span);
+      li.appendChild(link);
       li.appendChild(btn);
       urlQueueEl.appendChild(li);
     }
@@ -171,7 +175,7 @@
       return;
     }
 
-    var url = urlQueue[syncIndex];
+    var item = urlQueue[syncIndex];
     var bitrate = parseInt(bitrateSelect.value, 10);
     var navEnabled = navToggle && navToggle.classList.contains("active");
 
@@ -180,7 +184,7 @@
     fetch("/api/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: url, bitrate: bitrate, check_navidrome: navEnabled }),
+      body: JSON.stringify({ url: item.url, bitrate: bitrate, check_navidrome: navEnabled }),
     })
       .then(function (resp) {
         if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.error); });
