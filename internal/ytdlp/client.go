@@ -121,6 +121,35 @@ func (c *CommandClient) GetChannelPlaylists(ctx context.Context, channelURL stri
 	return playlists, nil
 }
 
+// GetURLInfo fetches the title for a YouTube URL (playlist or video).
+func (c *CommandClient) GetURLInfo(ctx context.Context, url string) (string, error) {
+	bin := c.BinaryPath
+	if bin == "" {
+		bin = "yt-dlp"
+	}
+
+	args := []string{"--dump-single-json", "--flat-playlist", "--no-warnings", url}
+	cmd := exec.CommandContext(ctx, bin, args...)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		log.Printf("[ytdlp] command failed for URL info %s: %v", url, err)
+		return "", fmt.Errorf("yt-dlp failed: %w: %s", err, stderr.String())
+	}
+
+	var info struct {
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &info); err != nil {
+		return "", fmt.Errorf("failed to parse yt-dlp output: %w", err)
+	}
+
+	return info.Title, nil
+}
+
 // normalizeChannelURL ensures the URL points to the channel's playlists tab.
 func normalizeChannelURL(url string) string {
 	url = strings.TrimSuffix(url, "/")

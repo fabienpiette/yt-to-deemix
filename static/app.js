@@ -59,9 +59,7 @@
     if (isChannelURL(url)) {
       fetchChannelPlaylists(url);
     } else {
-      urlQueue.push({ url: url, title: null });
-      urlInput.value = "";
-      renderQueue();
+      fetchURLInfo(url);
     }
   }
 
@@ -75,6 +73,29 @@
            url.indexOf("youtube.com/c/") !== -1 ||
            url.indexOf("youtube.com/user/") !== -1 ||
            url.indexOf("youtube.com/browse/") !== -1;
+  }
+
+  function fetchURLInfo(url) {
+    addBtn.disabled = true;
+    addBtn.textContent = "loading...";
+
+    fetch("/api/url/info?url=" + encodeURIComponent(url))
+      .then(function (resp) { return resp.json(); })
+      .then(function (data) {
+        urlQueue.push({ url: data.url || url, title: data.title || null });
+        urlInput.value = "";
+        renderQueue();
+      })
+      .catch(function () {
+        // Fallback: add with URL only
+        urlQueue.push({ url: url, title: null });
+        urlInput.value = "";
+        renderQueue();
+      })
+      .finally(function () {
+        addBtn.disabled = false;
+        addBtn.textContent = "add";
+      });
   }
 
   function fetchChannelPlaylists(channelURL) {

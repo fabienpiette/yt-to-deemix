@@ -68,6 +68,7 @@ func main() {
 	mux.HandleFunc("POST /api/sync", handleSync(pipeline))
 	mux.HandleFunc("GET /api/sync/{id}", handleGetSession(pipeline))
 	mux.HandleFunc("GET /api/channel/playlists", handleChannelPlaylists(ytClient))
+	mux.HandleFunc("GET /api/url/info", handleURLInfo(ytClient))
 	mux.HandleFunc("GET /api/stats", handleStats)
 	mux.HandleFunc("GET /api/navidrome/status", handleNavidromeStatus(navidromeConfigured))
 	mux.Handle("GET /", http.FileServer(http.Dir("static")))
@@ -207,6 +208,37 @@ func handleChannelPlaylists(ytClient *ytdlp.CommandClient) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+type urlInfoResponse struct {
+	URL   string `json:"url"`
+	Title string `json:"title"`
+}
+
+func handleURLInfo(ytClient *ytdlp.CommandClient) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		url := r.URL.Query().Get("url")
+		if url == "" {
+			http.Error(w, `{"error":"url query parameter is required"}`, http.StatusBadRequest)
+			return
+		}
+		if !isValidYouTubeURL(url) {
+			http.Error(w, `{"error":"invalid YouTube URL"}`, http.StatusBadRequest)
+			return
+		}
+
+		title, err := ytClient.GetURLInfo(r.Context(), url)
+		if err != nil {
+			log.Printf("[url-info] failed to fetch info for %s: %v", url, err)
+			// Return URL as title fallback instead of error
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(urlInfoResponse{URL: url, Title: ""})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(urlInfoResponse{URL: url, Title: title})
 	}
 }
 
