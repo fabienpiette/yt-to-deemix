@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os/exec"
 	"strings"
 )
@@ -48,6 +49,7 @@ func (c *CommandClient) GetPlaylist(ctx context.Context, playlistURL string) ([]
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		log.Printf("[ytdlp] command failed for %s: %v", playlistURL, err)
 		return nil, fmt.Errorf("yt-dlp failed: %w: %s", err, stderr.String())
 	}
 
@@ -88,6 +90,7 @@ func (c *CommandClient) GetChannelPlaylists(ctx context.Context, channelURL stri
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		log.Printf("[ytdlp] command failed for channel %s: %v", channelURL, err)
 		return nil, fmt.Errorf("yt-dlp failed: %w: %s", err, stderr.String())
 	}
 

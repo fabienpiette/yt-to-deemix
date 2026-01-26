@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -67,11 +68,13 @@ func (c *HTTPClient) Search(ctx context.Context, artist, title string) ([]Search
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		log.Printf("[navidrome] request failed: %v", err)
 		return nil, fmt.Errorf("navidrome: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("[navidrome] unexpected status %d", resp.StatusCode)
 		return nil, fmt.Errorf("navidrome: unexpected status %d", resp.StatusCode)
 	}
 
@@ -85,6 +88,7 @@ func (c *HTTPClient) Search(ctx context.Context, artist, title string) ([]Search
 		if sr.SubsonicResponse.Error != nil {
 			msg = sr.SubsonicResponse.Error.Message
 		}
+		log.Printf("[navidrome] API error: %s", msg)
 		return nil, fmt.Errorf("navidrome: API error: %s", msg)
 	}
 

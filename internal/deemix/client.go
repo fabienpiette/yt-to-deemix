@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -84,11 +85,13 @@ func (c *HTTPClient) Search(ctx context.Context, query string) ([]SearchResult, 
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		log.Printf("[deemix] search request failed: %v", err)
 		return nil, fmt.Errorf("search request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("[deemix] search failed with status %d for query: %s", resp.StatusCode, query)
 		return nil, fmt.Errorf("search failed (status %d)", resp.StatusCode)
 	}
 
@@ -144,12 +147,14 @@ func (c *HTTPClient) AddToQueue(ctx context.Context, deezerURL string, bitrate i
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		log.Printf("[deemix] queue request failed: %v", err)
 		return fmt.Errorf("queue request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
+		log.Printf("[deemix] queue failed (status %d) for %s: %s", resp.StatusCode, deezerURL, string(respBody))
 		return fmt.Errorf("queue failed (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
