@@ -14,16 +14,22 @@
       <button class="theme-toggle" id="themeToggle" title="Toggle theme">&#9680;</button>
     </header>
 
-    <form class="sync-form" id="syncForm">
-      <input type="text" id="urlInput" placeholder="YouTube URL (playlist or song)" autocomplete="off" required>
+    <div class="add-form" id="addForm">
+      <input type="text" id="urlInput" placeholder="YouTube URL (playlist or song)" autocomplete="off">
+      <button type="button" id="addBtn">add</button>
+    </div>
+
+    <ul class="url-queue" id="urlQueue"></ul>
+
+    <div class="sync-options" id="syncOptions">
       <select id="bitrateSelect">
         <option value="9">FLAC</option>
         <option value="3">320 kbps</option>
         <option value="1" selected>128 kbps</option>
       </select>
       <button type="button" class="nav-toggle" id="navCheck" title="Skip tracks already in Navidrome">skip existing</button>
-      <button type="submit" id="syncBtn">sync</button>
-    </form>
+      <button type="button" id="syncBtn">sync</button>
+    </div>
 
     <div class="error-msg" id="errorMsg"></div>
 

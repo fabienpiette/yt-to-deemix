@@ -1,55 +1,140 @@
 (function () {
   "use strict";
 
-  const form = document.getElementById("syncForm");
-  const urlInput = document.getElementById("urlInput");
-  const bitrateSelect = document.getElementById("bitrateSelect");
-  const syncBtn = document.getElementById("syncBtn");
-  const errorMsg = document.getElementById("errorMsg");
-  const progressEl = document.getElementById("progress");
-  const phaseEl = document.getElementById("phase");
-  const countSearched = document.getElementById("countSearched");
-  const countQueued = document.getElementById("countQueued");
-  const countSkipped = document.getElementById("countSkipped");
-  const countNotFound = document.getElementById("countNotFound");
-  const countTotal = document.getElementById("countTotal");
-  const navToggle = document.getElementById("navCheck");
-  const trackTable = document.getElementById("trackTable");
-  const trackBody = document.getElementById("trackBody");
-  const themeToggle = document.getElementById("themeToggle");
-  const statsEl = document.getElementById("stats");
+  var urlInput = document.getElementById("urlInput");
+  var addBtn = document.getElementById("addBtn");
+  var urlQueueEl = document.getElementById("urlQueue");
+  var syncOptions = document.getElementById("syncOptions");
+  var bitrateSelect = document.getElementById("bitrateSelect");
+  var syncBtn = document.getElementById("syncBtn");
+  var errorMsg = document.getElementById("errorMsg");
+  var progressEl = document.getElementById("progress");
+  var phaseEl = document.getElementById("phase");
+  var countSearched = document.getElementById("countSearched");
+  var countQueued = document.getElementById("countQueued");
+  var countSkipped = document.getElementById("countSkipped");
+  var countNotFound = document.getElementById("countNotFound");
+  var countTotal = document.getElementById("countTotal");
+  var navToggle = document.getElementById("navCheck");
+  var trackTable = document.getElementById("trackTable");
+  var trackBody = document.getElementById("trackBody");
+  var themeToggle = document.getElementById("themeToggle");
+  var statsEl = document.getElementById("stats");
 
-  let pollTimer = null;
-  let sessionId = null;
+  var urlQueue = [];
+  var pollTimer = null;
+  var sessionId = null;
+  var syncIndex = 0;
+  var isSyncing = false;
 
   // Theme toggle.
-  const savedTheme = localStorage.getItem("theme") || "light";
+  var savedTheme = localStorage.getItem("theme") || "light";
   document.documentElement.setAttribute("data-theme", savedTheme);
 
   themeToggle.addEventListener("click", function () {
-    const current = document.documentElement.getAttribute("data-theme");
-    const next = current === "dark" ? "light" : "dark";
+    var current = document.documentElement.getAttribute("data-theme");
+    var next = current === "dark" ? "light" : "dark";
     document.documentElement.setAttribute("data-theme", next);
     localStorage.setItem("theme", next);
   });
 
-  // Form submit.
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    startSync();
+  // Add button click.
+  addBtn.addEventListener("click", addToQueue);
+  urlInput.addEventListener("keypress", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addToQueue();
+    }
   });
 
-  function startSync() {
-    const url = urlInput.value.trim();
+  function addToQueue() {
+    var url = urlInput.value.trim();
     if (!url) return;
-
-    const bitrate = parseInt(bitrateSelect.value, 10);
-    const navEnabled = navToggle && navToggle.classList.contains("active");
+    if (!isValidURL(url)) {
+      showError("Invalid YouTube URL");
+      return;
+    }
     hideError();
+    urlQueue.push(url);
+    urlInput.value = "";
+    renderQueue();
+  }
+
+  function isValidURL(url) {
+    return url.indexOf("youtube.com") !== -1 || url.indexOf("youtu.be") !== -1;
+  }
+
+  function removeFromQueue(index) {
+    urlQueue.splice(index, 1);
+    renderQueue();
+  }
+
+  function renderQueue() {
+    clearElement(urlQueueEl);
+    for (var i = 0; i < urlQueue.length; i++) {
+      var li = document.createElement("li");
+
+      var span = document.createElement("span");
+      span.className = "url-text";
+      span.textContent = urlQueue[i];
+      span.title = urlQueue[i];
+
+      var btn = document.createElement("button");
+      btn.className = "remove-btn";
+      btn.textContent = "\u00d7";
+      btn.dataset.index = i;
+      btn.addEventListener("click", function () {
+        removeFromQueue(parseInt(this.dataset.index, 10));
+      });
+
+      li.appendChild(span);
+      li.appendChild(btn);
+      urlQueueEl.appendChild(li);
+    }
+
+    // Show/hide sync options based on queue.
+    if (urlQueue.length > 0) {
+      syncOptions.classList.add("active");
+    } else {
+      syncOptions.classList.remove("active");
+    }
+  }
+
+  // Sync button click.
+  syncBtn.addEventListener("click", startSyncAll);
+
+  function startSyncAll() {
+    if (urlQueue.length === 0 || isSyncing) return;
+
+    isSyncing = true;
+    syncIndex = 0;
     syncBtn.disabled = true;
+    addBtn.disabled = true;
     clearElement(trackBody);
     trackTable.classList.remove("active");
-    progressEl.classList.remove("active");
+    progressEl.classList.add("active");
+    resetCounts();
+    hideError();
+
+    syncNext();
+  }
+
+  function syncNext() {
+    if (syncIndex >= urlQueue.length) {
+      // All done.
+      isSyncing = false;
+      syncBtn.disabled = false;
+      addBtn.disabled = false;
+      urlQueue = [];
+      renderQueue();
+      return;
+    }
+
+    var url = urlQueue[syncIndex];
+    var bitrate = parseInt(bitrateSelect.value, 10);
+    var navEnabled = navToggle && navToggle.classList.contains("active");
+
+    phaseEl.textContent = "syncing " + (syncIndex + 1) + "/" + urlQueue.length;
 
     fetch("/api/sync", {
       method: "POST",
@@ -62,12 +147,12 @@
       })
       .then(function (data) {
         sessionId = data.session_id;
-        progressEl.classList.add("active");
         startPolling();
       })
       .catch(function (err) {
         showError(err.message || "Failed to start sync");
-        syncBtn.disabled = false;
+        syncIndex++;
+        syncNext();
       });
   }
 
@@ -87,21 +172,24 @@
         if (session.status === "done" || session.status === "error") {
           clearInterval(pollTimer);
           pollTimer = null;
-          syncBtn.disabled = false;
           if (session.status === "error") {
-            showError(session.error || "Sync failed");
+            showError(session.error || "Sync failed for: " + urlQueue[syncIndex]);
           }
+          syncIndex++;
+          syncNext();
         }
       })
       .catch(function () {
         clearInterval(pollTimer);
         pollTimer = null;
-        syncBtn.disabled = false;
+        syncIndex++;
+        syncNext();
       });
   }
 
   function renderSession(session) {
-    phaseEl.textContent = session.status;
+    var prefix = urlQueue.length > 1 ? "(" + (syncIndex + 1) + "/" + urlQueue.length + ") " : "";
+    phaseEl.textContent = prefix + session.status;
     countSearched.textContent = session.progress.searched;
     countQueued.textContent = session.progress.queued;
     countSkipped.textContent = session.progress.skipped;
@@ -171,6 +259,14 @@
     while (el.firstChild) {
       el.removeChild(el.firstChild);
     }
+  }
+
+  function resetCounts() {
+    countSearched.textContent = "0";
+    countQueued.textContent = "0";
+    countSkipped.textContent = "0";
+    countNotFound.textContent = "0";
+    countTotal.textContent = "0";
   }
 
   function showError(msg) {
