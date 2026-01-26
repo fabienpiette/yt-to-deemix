@@ -230,6 +230,7 @@ func TestIsChannelURL(t *testing.T) {
 		{"https://www.youtube.com/channel/UCxxxx", true},
 		{"https://www.youtube.com/c/ChannelName", true},
 		{"https://www.youtube.com/user/username", true},
+		{"https://music.youtube.com/browse/UCxxxx", true},
 		{"https://www.youtube.com/playlist?list=PLxxxx", false},
 		{"https://youtu.be/abc123", false},
 		{"https://example.com/@user", false},

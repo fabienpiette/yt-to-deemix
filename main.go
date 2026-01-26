@@ -214,5 +214,6 @@ func isChannelURL(url string) bool {
 	return strings.Contains(url, "youtube.com/@") ||
 		strings.Contains(url, "youtube.com/channel/") ||
 		strings.Contains(url, "youtube.com/c/") ||
-		strings.Contains(url, "youtube.com/user/")
+		strings.Contains(url, "youtube.com/user/") ||
+		strings.Contains(url, "youtube.com/browse/")
 }

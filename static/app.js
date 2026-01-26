@@ -73,7 +73,8 @@
     return url.indexOf("youtube.com/@") !== -1 ||
            url.indexOf("youtube.com/channel/") !== -1 ||
            url.indexOf("youtube.com/c/") !== -1 ||
-           url.indexOf("youtube.com/user/") !== -1;
+           url.indexOf("youtube.com/user/") !== -1 ||
+           url.indexOf("youtube.com/browse/") !== -1;
   }
 
   function fetchChannelPlaylists(channelURL) {
