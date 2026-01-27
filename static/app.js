@@ -465,7 +465,17 @@
       tdSelect.appendChild(checkbox);
 
       var tdTitle = document.createElement("td");
-      tdTitle.textContent = truncate(t.youtube_title, 40);
+      tdTitle.className = "track-title";
+      if (t.parsed_artist) {
+        var artistSpan = document.createElement("span");
+        artistSpan.className = "track-artist";
+        artistSpan.textContent = t.parsed_artist;
+        tdTitle.appendChild(artistSpan);
+      }
+      var songSpan = document.createElement("span");
+      songSpan.className = "track-song";
+      songSpan.textContent = t.parsed_song || t.youtube_title;
+      tdTitle.appendChild(songSpan);
       tdTitle.title = t.youtube_title;
 
       var tdMatched = document.createElement("td");

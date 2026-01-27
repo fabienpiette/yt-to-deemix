@@ -339,6 +339,21 @@ button:disabled {
   vertical-align: top;
 }
 
+.track-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.track-artist {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.track-song {
+  font-size: 0.8rem;
+}
+
 .track-table tr:last-child td {
   border-bottom: none;
 }
