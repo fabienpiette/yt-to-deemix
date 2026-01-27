@@ -57,9 +57,10 @@ func (p *Pipeline) SetConfidenceThreshold(threshold int) {
 	p.confidenceThreshold = threshold
 }
 
-// Start begins a new sync session for the given playlist URL and bitrate.
+// Analyze begins a new analysis session for the given playlist URL and bitrate.
 // Returns the session ID immediately; processing runs in a goroutine.
-func (p *Pipeline) Start(ctx context.Context, playlistURL string, bitrate int, checkNavidrome bool) string {
+// Analysis fetches, parses, searches Deezer, and checks Navidrome, then stops at StatusReady.
+func (p *Pipeline) Analyze(ctx context.Context, playlistURL string, bitrate int, checkNavidrome bool) string {
 	id := generateID()
 	session := &Session{
 		ID:             id,
@@ -73,7 +74,7 @@ func (p *Pipeline) Start(ctx context.Context, playlistURL string, bitrate int, c
 	p.sessions[id] = session
 	p.mu.Unlock()
 
-	log.Printf("[sync] session %s started: %s", id, playlistURL)
+	log.Printf("[sync] session %s analyzing: %s", id, playlistURL)
 	go p.run(ctx, session)
 	return id
 }
@@ -151,6 +152,8 @@ func (p *Pipeline) run(ctx context.Context, session *Session) {
 
 			if confidence >= p.confidenceThreshold {
 				session.Tracks[i].Status = TrackFound
+				session.Tracks[i].Selected = true
+				session.Progress.Selected++
 			} else {
 				session.Tracks[i].Status = TrackNeedsReview
 				session.Progress.NeedsReview++
@@ -187,6 +190,11 @@ func (p *Pipeline) run(ctx context.Context, session *Session) {
 			results, err := p.navidromeClient.Search(ctx, track.ParsedArtist, track.ParsedSong)
 			if err == nil && len(results) > 0 {
 				p.mu.Lock()
+				// Deselect if it was selected before marking as skipped.
+				if session.Tracks[i].Selected {
+					session.Tracks[i].Selected = false
+					session.Progress.Selected--
+				}
 				session.Tracks[i].Status = TrackSkipped
 				session.Progress.Skipped++
 				p.mu.Unlock()
@@ -198,43 +206,11 @@ func (p *Pipeline) run(ctx context.Context, session *Session) {
 		}
 	}
 
-	// Phase 4: Queue all found tracks.
+	// Analysis complete - wait for user to trigger download.
 	p.mu.Lock()
-	session.Status = StatusQueuing
-	p.mu.Unlock()
-
-	for i := range session.Tracks {
-		if ctx.Err() != nil {
-			p.setError(session, "canceled")
-			return
-		}
-
-		p.mu.RLock()
-		track := session.Tracks[i]
-		p.mu.RUnlock()
-
-		if track.DeezerMatch == nil || track.Status == TrackSkipped || track.Status == TrackNeedsReview {
-			continue
-		}
-
-		err := p.deemixClient.AddToQueue(ctx, track.DeezerMatch.Link, session.Bitrate)
-
-		p.mu.Lock()
-		if err != nil {
-			session.Tracks[i].Status = TrackError
-		} else {
-			session.Tracks[i].Status = TrackQueued
-			session.Progress.Queued++
-		}
-		p.mu.Unlock()
-
-		time.Sleep(p.queueDelay)
-	}
-
-	p.mu.Lock()
-	session.Status = StatusDone
-	log.Printf("[sync] session %s done: %d queued, %d skipped, %d needs review, %d not found",
-		session.ID, session.Progress.Queued, session.Progress.Skipped, session.Progress.NeedsReview, session.Progress.NotFound)
+	session.Status = StatusReady
+	log.Printf("[sync] session %s ready: %d selected, %d skipped, %d needs review, %d not found",
+		session.ID, session.Progress.Selected, session.Progress.Skipped, session.Progress.NeedsReview, session.Progress.NotFound)
 	p.mu.Unlock()
 }
 
@@ -259,48 +235,63 @@ func generateID() string {
 	return hex.EncodeToString(b)
 }
 
-// ApproveTrack queues a track that was marked as needs_review.
-// Returns an error if the track doesn't exist or isn't in needs_review status.
-func (p *Pipeline) ApproveTrack(ctx context.Context, sessionID string, trackIndex int) error {
+// Download queues all selected tracks for download.
+// Only works when session is in StatusReady state.
+func (p *Pipeline) Download(ctx context.Context, sessionID string) error {
 	p.mu.Lock()
 	session, ok := p.sessions[sessionID]
 	if !ok {
 		p.mu.Unlock()
 		return ErrSessionNotFound
 	}
-	if trackIndex < 0 || trackIndex >= len(session.Tracks) {
+	if session.Status != StatusReady {
 		p.mu.Unlock()
-		return ErrTrackNotFound
+		return ErrSessionNotReady
 	}
-	track := session.Tracks[trackIndex]
-	if track.Status != TrackNeedsReview {
-		p.mu.Unlock()
-		return ErrTrackNotReviewable
-	}
-	if track.DeezerMatch == nil {
-		p.mu.Unlock()
-		return ErrNoMatch
-	}
+	session.Status = StatusDownloading
 	p.mu.Unlock()
 
-	// Queue the track.
-	err := p.deemixClient.AddToQueue(ctx, track.DeezerMatch.Link, session.Bitrate)
+	log.Printf("[sync] session %s: starting download of %d selected tracks", sessionID, session.Progress.Selected)
+
+	for i := range session.Tracks {
+		if ctx.Err() != nil {
+			p.setError(session, "canceled")
+			return ctx.Err()
+		}
+
+		p.mu.RLock()
+		track := session.Tracks[i]
+		p.mu.RUnlock()
+
+		if !track.Selected || track.DeezerMatch == nil {
+			continue
+		}
+
+		err := p.deemixClient.AddToQueue(ctx, track.DeezerMatch.Link, session.Bitrate)
+
+		p.mu.Lock()
+		if err != nil {
+			session.Tracks[i].Status = TrackError
+		} else {
+			session.Tracks[i].Status = TrackQueued
+			session.Progress.Queued++
+		}
+		p.mu.Unlock()
+
+		time.Sleep(p.queueDelay)
+	}
 
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	if err != nil {
-		session.Tracks[trackIndex].Status = TrackError
-		return err
-	}
-	session.Tracks[trackIndex].Status = TrackQueued
-	session.Progress.Queued++
-	session.Progress.NeedsReview--
-	log.Printf("[sync] session %s: track %d approved and queued", sessionID, trackIndex)
+	session.Status = StatusDone
+	log.Printf("[sync] session %s done: %d queued", sessionID, session.Progress.Queued)
+	p.mu.Unlock()
+
 	return nil
 }
 
-// RejectTrack marks a needs_review track as rejected (not_found).
-func (p *Pipeline) RejectTrack(sessionID string, trackIndex int) error {
+// SetTrackSelected toggles the selection state of a track.
+// Only works when session is in StatusReady state.
+func (p *Pipeline) SetTrackSelected(sessionID string, trackIndex int, selected bool) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -308,16 +299,83 @@ func (p *Pipeline) RejectTrack(sessionID string, trackIndex int) error {
 	if !ok {
 		return ErrSessionNotFound
 	}
+	if session.Status != StatusReady {
+		return ErrSessionNotReady
+	}
 	if trackIndex < 0 || trackIndex >= len(session.Tracks) {
 		return ErrTrackNotFound
 	}
-	if session.Tracks[trackIndex].Status != TrackNeedsReview {
-		return ErrTrackNotReviewable
+
+	track := &session.Tracks[trackIndex]
+	if track.Selected == selected {
+		return nil // No change needed
 	}
 
-	session.Tracks[trackIndex].Status = TrackNotFound
-	session.Progress.NeedsReview--
-	session.Progress.NotFound++
-	log.Printf("[sync] session %s: track %d rejected", sessionID, trackIndex)
+	track.Selected = selected
+	if selected {
+		session.Progress.Selected++
+	} else {
+		session.Progress.Selected--
+	}
+
+	log.Printf("[sync] session %s: track %d selected=%v", sessionID, trackIndex, selected)
+	return nil
+}
+
+// SearchTrack performs a manual Deezer search for a track and updates its match.
+// Only works when session is in StatusReady state.
+func (p *Pipeline) SearchTrack(ctx context.Context, sessionID string, trackIndex int, query string) error {
+	p.mu.Lock()
+	session, ok := p.sessions[sessionID]
+	if !ok {
+		p.mu.Unlock()
+		return ErrSessionNotFound
+	}
+	if session.Status != StatusReady {
+		p.mu.Unlock()
+		return ErrSessionNotReady
+	}
+	if trackIndex < 0 || trackIndex >= len(session.Tracks) {
+		p.mu.Unlock()
+		return ErrTrackNotFound
+	}
+	p.mu.Unlock()
+
+	results, err := p.deemixClient.Search(ctx, query)
+	if err != nil {
+		return err
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	track := &session.Tracks[trackIndex]
+	wasNotFound := track.Status == TrackNotFound
+	hadMatch := track.DeezerMatch != nil
+
+	if len(results) == 0 {
+		track.DeezerMatch = nil
+		track.Confidence = 0
+		if !wasNotFound {
+			track.Status = TrackNotFound
+			session.Progress.NotFound++
+		}
+		return nil
+	}
+
+	match := results[0]
+	track.DeezerMatch = &match
+	track.Confidence = calculateConfidence(track.ParsedArtist, track.ParsedSong, match.Artist, match.Title)
+	track.Status = TrackFound
+
+	// Update progress counts
+	if wasNotFound {
+		session.Progress.NotFound--
+	}
+	if !hadMatch && track.Status == TrackNeedsReview {
+		session.Progress.NeedsReview--
+	}
+
+	log.Printf("[sync] session %s: track %d manual search found: %s - %s", sessionID, trackIndex, match.Artist, match.Title)
 	return nil
 }

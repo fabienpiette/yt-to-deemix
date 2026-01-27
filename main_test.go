@@ -39,12 +39,12 @@ func testPipeline() *sync.Pipeline {
 	return sync.NewPipeline(yt, &mockDX{}, nil)
 }
 
-func TestHandleSyncValid(t *testing.T) {
+func TestHandleAnalyzeValid(t *testing.T) {
 	pipeline := testPipeline()
-	handler := handleSync(pipeline)
+	handler := handleAnalyze(pipeline)
 
 	body := `{"url":"https://youtube.com/playlist?list=test","bitrate":3}`
-	req := httptest.NewRequest(http.MethodPost, "/api/sync", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/analyze", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -54,7 +54,7 @@ func TestHandleSyncValid(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 
-	var resp syncResponse
+	var resp analyzeResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
@@ -63,12 +63,12 @@ func TestHandleSyncValid(t *testing.T) {
 	}
 }
 
-func TestHandleSyncMissingURL(t *testing.T) {
+func TestHandleAnalyzeMissingURL(t *testing.T) {
 	pipeline := testPipeline()
-	handler := handleSync(pipeline)
+	handler := handleAnalyze(pipeline)
 
 	body := `{"bitrate":3}`
-	req := httptest.NewRequest(http.MethodPost, "/api/sync", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/analyze", bytes.NewBufferString(body))
 	w := httptest.NewRecorder()
 
 	handler(w, req)
@@ -78,12 +78,12 @@ func TestHandleSyncMissingURL(t *testing.T) {
 	}
 }
 
-func TestHandleSyncInvalidURL(t *testing.T) {
+func TestHandleAnalyzeInvalidURL(t *testing.T) {
 	pipeline := testPipeline()
-	handler := handleSync(pipeline)
+	handler := handleAnalyze(pipeline)
 
 	body := `{"url":"https://example.com/not-youtube"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/sync", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/analyze", bytes.NewBufferString(body))
 	w := httptest.NewRecorder()
 
 	handler(w, req)
@@ -93,11 +93,11 @@ func TestHandleSyncInvalidURL(t *testing.T) {
 	}
 }
 
-func TestHandleSyncInvalidBody(t *testing.T) {
+func TestHandleAnalyzeInvalidBody(t *testing.T) {
 	pipeline := testPipeline()
-	handler := handleSync(pipeline)
+	handler := handleAnalyze(pipeline)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/sync", bytes.NewBufferString("not json"))
+	req := httptest.NewRequest(http.MethodPost, "/api/analyze", bytes.NewBufferString("not json"))
 	w := httptest.NewRecorder()
 
 	handler(w, req)
@@ -111,13 +111,13 @@ func TestHandleGetSession(t *testing.T) {
 	pipeline := testPipeline()
 
 	// Start a session.
-	id := pipeline.Start(context.Background(), "https://youtube.com/playlist?list=test", deemix.Bitrate320, false)
+	id := pipeline.Analyze(context.Background(), "https://youtube.com/playlist?list=test", deemix.Bitrate320, false)
 
-	// Wait for completion.
+	// Wait for ready.
 	time.Sleep(100 * time.Millisecond)
 
 	handler := handleGetSession(pipeline)
-	req := httptest.NewRequest(http.MethodGet, "/api/sync/"+id, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/session/"+id, nil)
 	req.SetPathValue("id", id)
 	w := httptest.NewRecorder()
 
@@ -140,7 +140,7 @@ func TestHandleGetSessionNotFound(t *testing.T) {
 	pipeline := testPipeline()
 	handler := handleGetSession(pipeline)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/sync/nonexistent", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/session/nonexistent", nil)
 	req.SetPathValue("id", "nonexistent")
 	w := httptest.NewRecorder()
 

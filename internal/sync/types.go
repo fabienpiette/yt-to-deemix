@@ -6,12 +6,13 @@ import (
 	"github.com/gndm/ytToDeemix/internal/deemix"
 )
 
-// Error constants for track approval.
+// Error constants for session operations.
 var (
-	ErrSessionNotFound    = errors.New("session not found")
-	ErrTrackNotFound      = errors.New("track not found")
-	ErrTrackNotReviewable = errors.New("track is not in needs_review status")
-	ErrNoMatch            = errors.New("track has no deezer match")
+	ErrSessionNotFound  = errors.New("session not found")
+	ErrSessionNotReady  = errors.New("session is not in ready status")
+	ErrTrackNotFound    = errors.New("track not found")
+	ErrNoMatch          = errors.New("track has no deezer match")
+	ErrDownloadActive   = errors.New("download already in progress")
 )
 
 // Session represents a single sync operation from a YouTube playlist.
@@ -34,6 +35,7 @@ type Track struct {
 	DeezerMatch  *deemix.SearchResult `json:"deezer_match,omitempty"`
 	Status       string               `json:"status"`
 	Confidence   int                  `json:"confidence"`
+	Selected     bool                 `json:"selected"`
 }
 
 // Progress holds aggregate counts for the session.
@@ -44,17 +46,19 @@ type Progress struct {
 	NotFound    int `json:"not_found"`
 	Skipped     int `json:"skipped"`
 	NeedsReview int `json:"needs_review"`
+	Selected    int `json:"selected"`
 }
 
 // Status constants for sessions.
 const (
-	StatusFetching  = "fetching"
-	StatusParsing   = "parsing"
-	StatusSearching = "searching"
-	StatusChecking  = "checking"
-	StatusQueuing   = "queuing"
-	StatusDone      = "done"
-	StatusError     = "error"
+	StatusFetching    = "fetching"
+	StatusParsing     = "parsing"
+	StatusSearching   = "searching"
+	StatusChecking    = "checking"
+	StatusReady       = "ready"
+	StatusDownloading = "downloading"
+	StatusDone        = "done"
+	StatusError       = "error"
 )
 
 // Track status constants.

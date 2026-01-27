@@ -28,6 +28,8 @@ body {
   color: var(--fg);
   line-height: 1.5;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 header {
@@ -61,6 +63,9 @@ main {
   width: min(90%, 900px);
   margin: 0 auto;
   padding: 2rem 1rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 input {
@@ -108,26 +113,36 @@ button:disabled {
 
 .url-queue {
   list-style: none;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.5rem;
 }
 
 .url-queue:empty {
   display: none;
 }
 
+.url-queue:not(:empty) {
+  display: block;
+}
+
 .url-queue li {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.4rem 0;
+  padding: 0.3rem 0;
   font-size: 0.8rem;
   font-family: ui-monospace, monospace;
   color: var(--muted);
-  border-bottom: 1px solid var(--border);
 }
 
-.url-queue li:last-child {
-  border-bottom: none;
+.url-queue li + li {
+  border-top: 1px solid var(--border);
+  padding-top: 0.4rem;
+  margin-top: 0.1rem;
 }
 
 .url-queue .url-text {
@@ -160,11 +175,31 @@ button:disabled {
 .sync-options {
   display: none;
   gap: 0.5rem;
-  margin-bottom: 2rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .sync-options.active {
   display: flex;
+}
+
+#downloadBtn {
+  display: none;
+  background: #2a2;
+  border-color: #2a2;
+}
+
+#downloadBtn.active {
+  display: inline-block;
+}
+
+#downloadBtn:hover {
+  opacity: 0.9;
+}
+
+#downloadBtn:disabled {
+  background: var(--muted);
+  border-color: var(--muted);
 }
 
 .nav-toggle {
@@ -214,15 +249,32 @@ button:disabled {
   gap: 1.5rem;
 }
 
+.track-container {
+  display: none;
+  flex: 1;
+  min-height: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.track-container.active {
+  display: block;
+}
+
 .track-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
-  display: none;
 }
 
-.track-table.active {
-  display: table;
+.track-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 1;
 }
 
 .track-table th {
@@ -234,6 +286,49 @@ button:disabled {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--muted);
+}
+
+.track-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.track-table th.sortable:hover {
+  color: var(--fg);
+}
+
+.track-table th.sortable::after {
+  content: "";
+  margin-left: 0.3rem;
+  opacity: 0.3;
+}
+
+.track-table th.sort-asc::after {
+  content: "\25B2";
+  opacity: 1;
+}
+
+.track-table th.sort-desc::after {
+  content: "\25BC";
+  opacity: 1;
+}
+
+.track-table th.col-select,
+.track-table td.col-select {
+  width: 2rem;
+  text-align: center;
+  padding: 0.5rem 0.4rem;
+}
+
+.track-table .track-select {
+  cursor: pointer;
+  width: 1rem;
+  height: 1rem;
+}
+
+.track-table .track-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .track-table td {
@@ -251,31 +346,59 @@ button:disabled {
 .status-icon {
   font-family: inherit;
   white-space: nowrap;
+  cursor: help;
 }
 
-.review-btn {
-  padding: 0.2rem 0.5rem;
+.status-found,
+.status-queued {
+  color: #2a2;
+}
+
+.status-needs_review {
+  color: #c90;
+}
+
+.status-not_found,
+.status-error {
+  color: #c33;
+}
+
+.status-skipped,
+.status-searching {
+  color: var(--muted);
+}
+
+.deezer-result .search-input {
+  width: 100%;
+  max-width: 200px;
+  padding: 0.25rem 0.4rem;
   font-size: 0.75rem;
-  margin-right: 0.3rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-monospace, monospace;
+}
+
+.deezer-result .search-input:focus {
+  outline: 1px solid var(--fg);
+}
+
+.deezer-result .search-btn {
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.7rem;
   background: var(--bg);
   color: var(--muted);
   border: 1px solid var(--border);
+  cursor: pointer;
+  vertical-align: middle;
 }
 
-.review-btn:hover {
+.deezer-result .search-btn:hover {
   color: var(--fg);
   border-color: var(--fg);
 }
 
-.review-btn.approve:hover {
-  color: #2a2;
-  border-color: #2a2;
-}
-
-.review-btn.reject:hover {
-  color: #a22;
-  border-color: #a22;
-}
 
 .error-msg {
   color: var(--fg);
@@ -293,8 +416,8 @@ button:disabled {
 }
 
 footer {
-  margin-top: 4rem;
-  padding-top: 1rem;
+  margin-top: auto;
+  padding: 1rem;
   border-top: 1px solid var(--border);
   font-size: 0.75rem;
   color: var(--muted);
@@ -303,6 +426,7 @@ footer {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
+  background: var(--bg);
 }
 
 .stats {

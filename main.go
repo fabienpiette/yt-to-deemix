@@ -75,10 +75,11 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/sync", handleSync(pipeline))
-	mux.HandleFunc("GET /api/sync/{id}", handleGetSession(pipeline))
-	mux.HandleFunc("POST /api/sync/{id}/track/{index}/approve", handleApproveTrack(pipeline))
-	mux.HandleFunc("POST /api/sync/{id}/track/{index}/reject", handleRejectTrack(pipeline))
+	mux.HandleFunc("POST /api/analyze", handleAnalyze(pipeline))
+	mux.HandleFunc("GET /api/session/{id}", handleGetSession(pipeline))
+	mux.HandleFunc("POST /api/session/{id}/download", handleDownload(pipeline))
+	mux.HandleFunc("POST /api/session/{id}/track/{index}/select", handleSelectTrack(pipeline))
+	mux.HandleFunc("POST /api/session/{id}/track/{index}/search", handleSearchTrack(pipeline))
 	mux.HandleFunc("GET /api/channel/playlists", handleChannelPlaylists(ytClient))
 	mux.HandleFunc("GET /api/url/info", handleURLInfo(ytClient))
 	mux.HandleFunc("GET /api/stats", handleStats)
@@ -91,19 +92,19 @@ func main() {
 	}
 }
 
-type syncRequest struct {
+type analyzeRequest struct {
 	URL            string `json:"url"`
 	Bitrate        int    `json:"bitrate"`
 	CheckNavidrome bool   `json:"check_navidrome"`
 }
 
-type syncResponse struct {
+type analyzeResponse struct {
 	SessionID string `json:"session_id"`
 }
 
-func handleSync(pipeline *sync.Pipeline) http.HandlerFunc {
+func handleAnalyze(pipeline *sync.Pipeline) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req syncRequest
+		var req analyzeRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 			return
@@ -120,10 +121,10 @@ func handleSync(pipeline *sync.Pipeline) http.HandlerFunc {
 			req.Bitrate = deemix.Bitrate128
 		}
 
-		id := pipeline.Start(context.Background(), req.URL, req.Bitrate, req.CheckNavidrome)
+		id := pipeline.Analyze(context.Background(), req.URL, req.Bitrate, req.CheckNavidrome)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(syncResponse{SessionID: id})
+		json.NewEncoder(w).Encode(analyzeResponse{SessionID: id})
 	}
 }
 
@@ -263,36 +264,30 @@ func isChannelURL(url string) bool {
 		strings.Contains(url, "youtube.com/browse/")
 }
 
-func handleApproveTrack(pipeline *sync.Pipeline) http.HandlerFunc {
+func handleDownload(pipeline *sync.Pipeline) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID := r.PathValue("id")
-		indexStr := r.PathValue("index")
-		index, err := strconv.Atoi(indexStr)
-		if err != nil {
-			http.Error(w, `{"error":"invalid track index"}`, http.StatusBadRequest)
-			return
-		}
 
-		if err := pipeline.ApproveTrack(r.Context(), sessionID, index); err != nil {
-			switch err {
-			case sync.ErrSessionNotFound:
-				http.Error(w, `{"error":"session not found"}`, http.StatusNotFound)
-			case sync.ErrTrackNotFound:
-				http.Error(w, `{"error":"track not found"}`, http.StatusNotFound)
-			case sync.ErrTrackNotReviewable:
-				http.Error(w, `{"error":"track is not in needs_review status"}`, http.StatusBadRequest)
-			default:
-				http.Error(w, `{"error":"failed to queue track"}`, http.StatusInternalServerError)
+		go func() {
+			if err := pipeline.Download(context.Background(), sessionID); err != nil {
+				// Error is logged in pipeline; client polls for status
 			}
-			return
-		}
+		}()
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"queued"}`))
+		w.Write([]byte(`{"status":"downloading"}`))
 	}
 }
 
-func handleRejectTrack(pipeline *sync.Pipeline) http.HandlerFunc {
+type selectRequest struct {
+	Selected bool `json:"selected"`
+}
+
+type selectResponse struct {
+	Selected bool `json:"selected"`
+}
+
+func handleSelectTrack(pipeline *sync.Pipeline) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID := r.PathValue("id")
 		indexStr := r.PathValue("index")
@@ -302,21 +297,99 @@ func handleRejectTrack(pipeline *sync.Pipeline) http.HandlerFunc {
 			return
 		}
 
-		if err := pipeline.RejectTrack(sessionID, index); err != nil {
+		var req selectRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+
+		if err := pipeline.SetTrackSelected(sessionID, index, req.Selected); err != nil {
 			switch err {
 			case sync.ErrSessionNotFound:
 				http.Error(w, `{"error":"session not found"}`, http.StatusNotFound)
+			case sync.ErrSessionNotReady:
+				http.Error(w, `{"error":"session is not ready for modifications"}`, http.StatusBadRequest)
 			case sync.ErrTrackNotFound:
 				http.Error(w, `{"error":"track not found"}`, http.StatusNotFound)
-			case sync.ErrTrackNotReviewable:
-				http.Error(w, `{"error":"track is not in needs_review status"}`, http.StatusBadRequest)
 			default:
-				http.Error(w, `{"error":"failed to reject track"}`, http.StatusInternalServerError)
+				http.Error(w, `{"error":"failed to update track selection"}`, http.StatusInternalServerError)
 			}
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"rejected"}`))
+		json.NewEncoder(w).Encode(selectResponse{Selected: req.Selected})
+	}
+}
+
+type searchRequest struct {
+	Query string `json:"query"`
+}
+
+type searchResponse struct {
+	DeezerMatch *struct {
+		ID     int64  `json:"id"`
+		Title  string `json:"title"`
+		Artist string `json:"artist"`
+		Link   string `json:"link"`
+	} `json:"deezer_match,omitempty"`
+	Confidence int `json:"confidence"`
+}
+
+func handleSearchTrack(pipeline *sync.Pipeline) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID := r.PathValue("id")
+		indexStr := r.PathValue("index")
+		index, err := strconv.Atoi(indexStr)
+		if err != nil {
+			http.Error(w, `{"error":"invalid track index"}`, http.StatusBadRequest)
+			return
+		}
+
+		var req searchRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		if req.Query == "" {
+			http.Error(w, `{"error":"query is required"}`, http.StatusBadRequest)
+			return
+		}
+
+		if err := pipeline.SearchTrack(r.Context(), sessionID, index, req.Query); err != nil {
+			switch err {
+			case sync.ErrSessionNotFound:
+				http.Error(w, `{"error":"session not found"}`, http.StatusNotFound)
+			case sync.ErrSessionNotReady:
+				http.Error(w, `{"error":"session is not ready for modifications"}`, http.StatusBadRequest)
+			case sync.ErrTrackNotFound:
+				http.Error(w, `{"error":"track not found"}`, http.StatusNotFound)
+			default:
+				http.Error(w, `{"error":"search failed"}`, http.StatusInternalServerError)
+			}
+			return
+		}
+
+		// Get updated session to return the new match
+		session, _ := pipeline.GetSession(sessionID)
+		track := session.Tracks[index]
+
+		resp := searchResponse{Confidence: track.Confidence}
+		if track.DeezerMatch != nil {
+			resp.DeezerMatch = &struct {
+				ID     int64  `json:"id"`
+				Title  string `json:"title"`
+				Artist string `json:"artist"`
+				Link   string `json:"link"`
+			}{
+				ID:     track.DeezerMatch.ID,
+				Title:  track.DeezerMatch.Title,
+				Artist: track.DeezerMatch.Artist,
+				Link:   track.DeezerMatch.Link,
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
 	}
 }
