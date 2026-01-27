@@ -28,11 +28,13 @@
 
   var urlQueue = [];
   var pollTimer = null;
-  var sessionId = null;
+  var sessionIds = [];
+  var currentSessionId = null;
   var syncIndex = 0;
   var isAnalyzing = false;
   var isReady = false;
   var currentTracks = [];
+  var totalProgress = { searched: 0, selected: 0, queued: 0, skipped: 0, needs_review: 0, not_found: 0, total: 0 };
   var sortColumn = null;
   var sortAsc = true;
 
@@ -287,7 +289,10 @@
     isAnalyzing = true;
     isReady = false;
     syncIndex = 0;
+    sessionIds = [];
+    currentSessionId = null;
     currentTracks = [];
+    totalProgress = { searched: 0, selected: 0, queued: 0, skipped: 0, needs_review: 0, not_found: 0, total: 0 };
     sortColumn = null;
     sortAsc = true;
     updateSortIndicators();
@@ -331,7 +336,8 @@
         return resp.json();
       })
       .then(function (data) {
-        sessionId = data.session_id;
+        currentSessionId = data.session_id;
+        sessionIds.push(data.session_id);
         startPolling();
       })
       .catch(function (err) {
@@ -342,23 +348,109 @@
   }
 
   function startDownload() {
-    if (!isReady || !sessionId) return;
+    if (!isReady || sessionIds.length === 0) return;
 
     isReady = false;
     analyzeBtn.disabled = true;
     downloadBtn.disabled = true;
     phaseEl.textContent = "downloading";
 
-    fetch("/api/session/" + sessionId + "/download", { method: "POST" })
-      .then(function (resp) {
-        if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.error); });
-        startPolling();
+    // Download from all sessions
+    var downloadPromises = sessionIds.map(function (sid) {
+      return fetch("/api/session/" + sid + "/download", { method: "POST" })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.error); });
+          return resp.json();
+        });
+    });
+
+    Promise.all(downloadPromises)
+      .then(function () {
+        // Poll all sessions for completion
+        startMultiSessionPolling();
       })
       .catch(function (err) {
         showError(err.message || "Failed to start download");
         isReady = true;
         analyzeBtn.disabled = false;
         downloadBtn.disabled = false;
+      });
+  }
+
+  function startMultiSessionPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(pollAllSessions, 800);
+    pollAllSessions();
+  }
+
+  function pollAllSessions() {
+    var promises = sessionIds.map(function (sid) {
+      return fetch("/api/session/" + sid).then(function (r) { return r.json(); });
+    });
+
+    Promise.all(promises)
+      .then(function (sessions) {
+        // Check if all sessions are done
+        var allDone = sessions.every(function (s) {
+          return s.status === "done" || s.status === "error";
+        });
+
+        // Update progress from all sessions
+        var totals = { searched: 0, selected: 0, queued: 0, skipped: 0, needs_review: 0, not_found: 0, total: 0 };
+        var allTracks = [];
+        sessions.forEach(function (s) {
+          totals.searched += s.progress.searched;
+          totals.selected += s.progress.selected;
+          totals.queued += s.progress.queued;
+          totals.skipped += s.progress.skipped;
+          totals.needs_review += s.progress.needs_review;
+          totals.not_found += s.progress.not_found;
+          totals.total += s.progress.total;
+          if (s.tracks) {
+            for (var i = 0; i < s.tracks.length; i++) {
+              s.tracks[i]._originalIndex = i;
+              s.tracks[i]._sessionId = s.id;
+              allTracks.push(s.tracks[i]);
+            }
+          }
+        });
+
+        countSearched.textContent = totals.searched;
+        countSelected.textContent = totals.selected;
+        countQueued.textContent = totals.queued;
+        countSkipped.textContent = totals.skipped;
+        countReview.textContent = totals.needs_review;
+        countNotFound.textContent = totals.not_found;
+        countTotal.textContent = totals.total;
+
+        currentTracks = allTracks;
+        totalProgress = totals;
+        renderTracks(sortTracks(currentTracks), null, false);
+
+        if (allDone) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          phaseEl.textContent = "done";
+          downloadBtn.classList.remove("active");
+          isAnalyzing = false;
+          analyzeBtn.disabled = false;
+          addBtn.disabled = false;
+
+          // Check for errors
+          var errors = sessions.filter(function (s) { return s.status === "error"; });
+          if (errors.length > 0) {
+            showError("Some downloads failed");
+          }
+        } else {
+          phaseEl.textContent = "downloading";
+        }
+      })
+      .catch(function () {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        isAnalyzing = false;
+        analyzeBtn.disabled = false;
+        addBtn.disabled = false;
       });
   }
 
@@ -369,25 +461,47 @@
   }
 
   function pollSession() {
-    if (!sessionId) return;
+    if (!currentSessionId) return;
 
-    fetch("/api/session/" + sessionId)
+    fetch("/api/session/" + currentSessionId)
       .then(function (resp) { return resp.json(); })
       .then(function (session) {
-        renderSession(session);
+        renderSession(session, false);
         if (session.status === "ready") {
           clearInterval(pollTimer);
           pollTimer = null;
-          isReady = true;
-          isAnalyzing = false;
-          analyzeBtn.disabled = false;
-          downloadBtn.classList.add("active");
-          downloadBtn.disabled = false;
-          addBtn.disabled = false;
+
+          // Accumulate tracks from this session
+          for (var i = 0; i < session.tracks.length; i++) {
+            session.tracks[i]._originalIndex = i;
+            session.tracks[i]._sessionId = session.id;
+            currentTracks.push(session.tracks[i]);
+          }
+
+          // Accumulate progress stats
+          totalProgress.searched += session.progress.searched;
+          totalProgress.selected += session.progress.selected;
+          totalProgress.queued += session.progress.queued;
+          totalProgress.skipped += session.progress.skipped;
+          totalProgress.needs_review += session.progress.needs_review;
+          totalProgress.not_found += session.progress.not_found;
+          totalProgress.total += session.progress.total;
+
           syncIndex++;
           if (syncIndex < urlQueue.length) {
-            // More URLs to analyze
+            // More URLs to analyze - continue
             analyzeNext();
+          } else {
+            // All done - show accumulated results
+            isReady = true;
+            isAnalyzing = false;
+            analyzeBtn.disabled = false;
+            downloadBtn.classList.add("active");
+            downloadBtn.disabled = false;
+            addBtn.disabled = false;
+            phaseEl.textContent = "ready";
+            renderSession({ tracks: currentTracks, progress: totalProgress, status: "ready", id: null }, true);
+            renderTracks(sortTracks(currentTracks), null, true);
           }
         } else if (session.status === "done" || session.status === "error") {
           clearInterval(pollTimer);
@@ -395,7 +509,7 @@
           isReady = false;
           downloadBtn.classList.remove("active");
           if (session.status === "error") {
-            showError(session.error || "Failed for: " + (urlQueue[syncIndex] ? urlQueue[syncIndex].url : sessionId));
+            showError(session.error || "Failed for: " + (urlQueue[syncIndex] ? urlQueue[syncIndex].url : currentSessionId));
           }
           syncIndex++;
           if (isAnalyzing && syncIndex < urlQueue.length) {
@@ -421,25 +535,41 @@
       });
   }
 
-  function renderSession(session) {
+  function renderSession(session, isFinal) {
     var prefix = urlQueue.length > 1 ? "(" + (syncIndex + 1) + "/" + urlQueue.length + ") " : "";
     phaseEl.textContent = prefix + session.status;
-    countSearched.textContent = session.progress.searched;
-    countSelected.textContent = session.progress.selected;
-    countQueued.textContent = session.progress.queued;
-    countSkipped.textContent = session.progress.skipped;
-    countReview.textContent = session.progress.needs_review;
-    countNotFound.textContent = session.progress.not_found;
-    countTotal.textContent = session.progress.total;
+
+    // For in-progress sessions, show current session stats
+    // For final render, show accumulated totals
+    if (isFinal) {
+      countSearched.textContent = totalProgress.searched;
+      countSelected.textContent = totalProgress.selected;
+      countQueued.textContent = totalProgress.queued;
+      countSkipped.textContent = totalProgress.skipped;
+      countReview.textContent = totalProgress.needs_review;
+      countNotFound.textContent = totalProgress.not_found;
+      countTotal.textContent = totalProgress.total;
+    } else {
+      // Show current session progress + accumulated from previous sessions
+      countSearched.textContent = totalProgress.searched + session.progress.searched;
+      countSelected.textContent = totalProgress.selected + session.progress.selected;
+      countQueued.textContent = totalProgress.queued + session.progress.queued;
+      countSkipped.textContent = totalProgress.skipped + session.progress.skipped;
+      countReview.textContent = totalProgress.needs_review + session.progress.needs_review;
+      countNotFound.textContent = totalProgress.not_found + session.progress.not_found;
+      countTotal.textContent = totalProgress.total + session.progress.total;
+    }
 
     if (session.tracks && session.tracks.length > 0) {
       trackContainer.classList.add("active");
-      // Preserve original indices for API calls
+      // Preserve original indices and session ID for API calls
       for (var i = 0; i < session.tracks.length; i++) {
         session.tracks[i]._originalIndex = i;
+        session.tracks[i]._sessionId = session.id;
       }
-      currentTracks = session.tracks;
-      renderTracks(sortTracks(currentTracks), session.id, session.status === "ready");
+      // During analysis, show only current session tracks
+      // Final accumulated tracks are built when session reaches ready
+      renderTracks(sortTracks(session.tracks), session.id, session.status === "ready");
     }
   }
 
@@ -448,6 +578,7 @@
     for (var i = 0; i < tracks.length; i++) {
       var tr = document.createElement("tr");
       var t = tracks[i];
+      var trackSid = t._sessionId || sid;
 
       // Checkbox column
       var tdSelect = document.createElement("td");
@@ -457,7 +588,7 @@
       checkbox.className = "track-select";
       checkbox.checked = t.selected;
       checkbox.dataset.index = t._originalIndex !== undefined ? t._originalIndex : i;
-      checkbox.dataset.sid = sid;
+      checkbox.dataset.sid = trackSid;
       checkbox.disabled = !editable || t.status === "skipped" || t.status === "queued";
       checkbox.addEventListener("change", function () {
         toggleTrackSelection(this.dataset.sid, parseInt(this.dataset.index, 10), this.checked);
@@ -504,7 +635,7 @@
           searchBtn.textContent = "\u270E"; // pencil icon
           searchBtn.title = "Search for different match";
           searchBtn.dataset.index = t._originalIndex !== undefined ? t._originalIndex : i;
-          searchBtn.dataset.sid = sid;
+          searchBtn.dataset.sid = trackSid;
           searchBtn.addEventListener("click", function () {
             showSearchInput(this.parentElement, this.dataset.sid, parseInt(this.dataset.index, 10));
           });
@@ -512,7 +643,7 @@
         }
       } else if (editable && t.status === "not_found") {
         // Show search input for not found tracks
-        createSearchInput(tdResult, sid, t._originalIndex !== undefined ? t._originalIndex : i);
+        createSearchInput(tdResult, trackSid, t._originalIndex !== undefined ? t._originalIndex : i);
       } else {
         tdResult.textContent = "\u2014";
       }
@@ -546,14 +677,21 @@
       })
       .then(function () {
         // Update the selected count
-        var currentCount = parseInt(countSelected.textContent, 10);
-        countSelected.textContent = selected ? currentCount + 1 : currentCount - 1;
+        totalProgress.selected += selected ? 1 : -1;
+        countSelected.textContent = totalProgress.selected;
+        // Update the track in currentTracks
+        for (var i = 0; i < currentTracks.length; i++) {
+          if (currentTracks[i]._sessionId === sid && currentTracks[i]._originalIndex === index) {
+            currentTracks[i].selected = selected;
+            break;
+          }
+        }
         updateSelectAllState();
       })
       .catch(function (err) {
         showError(err.message || "Failed to update selection");
         // Revert checkbox
-        var checkbox = trackBody.querySelector('input[data-index="' + index + '"]');
+        var checkbox = trackBody.querySelector('input[data-sid="' + sid + '"][data-index="' + index + '"]');
         if (checkbox) checkbox.checked = !selected;
       });
   }
