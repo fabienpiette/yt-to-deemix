@@ -202,6 +202,33 @@ button:disabled {
   border-color: var(--muted);
 }
 
+.session-controls {
+  display: none;
+  gap: 0.25rem;
+}
+
+.session-controls.active {
+  display: inline-flex;
+}
+
+.session-controls button {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.session-controls button:hover {
+  color: var(--fg);
+  border-color: var(--fg);
+}
+
+#cancelBtn:hover {
+  color: #c33;
+  border-color: #c33;
+}
+
 .nav-toggle {
   display: none;
   padding: 0.5rem 0.75rem;
@@ -242,6 +269,10 @@ button:disabled {
   letter-spacing: 0.1em;
   color: var(--muted);
   margin-bottom: 0.5rem;
+}
+
+.progress .phase.paused {
+  color: #c90;
 }
 
 .progress .counts {

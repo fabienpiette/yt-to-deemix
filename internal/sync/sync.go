@@ -17,12 +17,20 @@ import (
 // Default confidence threshold (0-100).
 const DefaultConfidenceThreshold = 70
 
+// sessionControl holds cancellation and pause/resume channels for a session.
+type sessionControl struct {
+	cancel   context.CancelFunc
+	pauseCh  chan struct{}
+	resumeCh chan struct{}
+}
+
 // Pipeline manages sync sessions.
 type Pipeline struct {
 	ytClient            ytdlp.Client
 	deemixClient        deemix.Client
 	navidromeClient     navidrome.Client
 	sessions            map[string]*Session
+	controls            map[string]*sessionControl
 	mu                  sync.RWMutex
 	searchDelay         time.Duration
 	queueDelay          time.Duration
@@ -38,6 +46,7 @@ func NewPipeline(yt ytdlp.Client, dx deemix.Client, nav navidrome.Client) *Pipel
 		deemixClient:        dx,
 		navidromeClient:     nav,
 		sessions:            make(map[string]*Session),
+		controls:            make(map[string]*sessionControl),
 		searchDelay:         200 * time.Millisecond,
 		queueDelay:          100 * time.Millisecond,
 		checkDelay:          100 * time.Millisecond,
@@ -70,8 +79,17 @@ func (p *Pipeline) Analyze(ctx context.Context, playlistURL string, bitrate int,
 		CheckNavidrome: checkNavidrome,
 	}
 
+	// Create cancellable context and control channels.
+	ctx, cancel := context.WithCancel(ctx)
+	ctrl := &sessionControl{
+		cancel:   cancel,
+		pauseCh:  make(chan struct{}, 1),
+		resumeCh: make(chan struct{}, 1),
+	}
+
 	p.mu.Lock()
 	p.sessions[id] = session
+	p.controls[id] = ctrl
 	p.mu.Unlock()
 
 	log.Printf("[sync] session %s analyzing: %s", id, playlistURL)
@@ -121,8 +139,10 @@ func (p *Pipeline) run(ctx context.Context, session *Session) {
 
 	// Phase 3: Search Deemix for each track.
 	for i := range session.Tracks {
-		if ctx.Err() != nil {
-			p.setError(session, "canceled")
+		if err := p.checkpoint(ctx, session, StatusSearching); err != nil {
+			if session.Status != StatusCanceled {
+				p.setError(session, "canceled")
+			}
 			return
 		}
 
@@ -174,8 +194,10 @@ func (p *Pipeline) run(ctx context.Context, session *Session) {
 		p.mu.Unlock()
 
 		for i := range session.Tracks {
-			if ctx.Err() != nil {
-				p.setError(session, "canceled")
+			if err := p.checkpoint(ctx, session, StatusChecking); err != nil {
+				if session.Status != StatusCanceled {
+					p.setError(session, "canceled")
+				}
 				return
 			}
 
@@ -222,6 +244,140 @@ func (p *Pipeline) setError(session *Session, msg string) {
 	p.mu.Unlock()
 }
 
+// checkpoint checks for cancellation or pause signals.
+// Returns an error if the context is canceled, or blocks if paused until resumed.
+func (p *Pipeline) checkpoint(ctx context.Context, session *Session, previousStatus string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	p.mu.RLock()
+	ctrl, ok := p.controls[session.ID]
+	p.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-ctrl.pauseCh:
+		p.mu.Lock()
+		session.Status = StatusPaused
+		log.Printf("[sync] session %s paused", session.ID)
+		p.mu.Unlock()
+
+		// Wait for resume or cancel.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ctrl.resumeCh:
+			p.mu.Lock()
+			session.Status = previousStatus
+			log.Printf("[sync] session %s resumed", session.ID)
+			p.mu.Unlock()
+		}
+	default:
+		// Not paused, continue.
+	}
+	return nil
+}
+
+// PauseSession pauses the session, allowing it to be resumed later.
+func (p *Pipeline) PauseSession(sessionID string) error {
+	p.mu.RLock()
+	session, ok := p.sessions[sessionID]
+	ctrl, ctrlOk := p.controls[sessionID]
+	p.mu.RUnlock()
+
+	if !ok || !ctrlOk {
+		return ErrSessionNotFound
+	}
+
+	// Only allow pausing active operations.
+	switch session.Status {
+	case StatusFetching, StatusParsing, StatusSearching, StatusChecking, StatusDownloading:
+		// Valid states for pausing.
+	case StatusPaused:
+		return ErrSessionPaused
+	default:
+		return ErrSessionNotReady
+	}
+
+	// Signal pause (non-blocking).
+	select {
+	case ctrl.pauseCh <- struct{}{}:
+	default:
+		// Already signaled.
+	}
+
+	log.Printf("[sync] session %s pause requested", sessionID)
+	return nil
+}
+
+// ResumeSession resumes a paused session.
+func (p *Pipeline) ResumeSession(sessionID string) error {
+	p.mu.RLock()
+	session, ok := p.sessions[sessionID]
+	ctrl, ctrlOk := p.controls[sessionID]
+	p.mu.RUnlock()
+
+	if !ok || !ctrlOk {
+		return ErrSessionNotFound
+	}
+
+	if session.Status != StatusPaused {
+		return ErrSessionNotPaused
+	}
+
+	// Signal resume (non-blocking).
+	select {
+	case ctrl.resumeCh <- struct{}{}:
+	default:
+		// Already signaled.
+	}
+
+	log.Printf("[sync] session %s resume requested", sessionID)
+	return nil
+}
+
+// CancelSession cancels a session, stopping it permanently.
+func (p *Pipeline) CancelSession(sessionID string) error {
+	p.mu.Lock()
+	session, ok := p.sessions[sessionID]
+	ctrl, ctrlOk := p.controls[sessionID]
+	p.mu.Unlock()
+
+	if !ok {
+		return ErrSessionNotFound
+	}
+
+	// Check if already in terminal state.
+	switch session.Status {
+	case StatusDone, StatusError, StatusCanceled:
+		return ErrSessionCanceled
+	}
+
+	// Cancel the context if we have control.
+	if ctrlOk {
+		ctrl.cancel()
+		// Also signal resume in case it's paused, so it can exit.
+		select {
+		case ctrl.resumeCh <- struct{}{}:
+		default:
+		}
+	}
+
+	p.mu.Lock()
+	session.Status = StatusCanceled
+	p.mu.Unlock()
+
+	log.Printf("[sync] session %s canceled", sessionID)
+	return nil
+}
+
 func buildQuery(artist, song string) string {
 	if artist == "" {
 		return song
@@ -249,14 +405,25 @@ func (p *Pipeline) Download(ctx context.Context, sessionID string) error {
 		return ErrSessionNotReady
 	}
 	session.Status = StatusDownloading
+
+	// Create cancellable context and control channels for download.
+	ctx, cancel := context.WithCancel(ctx)
+	ctrl := &sessionControl{
+		cancel:   cancel,
+		pauseCh:  make(chan struct{}, 1),
+		resumeCh: make(chan struct{}, 1),
+	}
+	p.controls[sessionID] = ctrl
 	p.mu.Unlock()
 
 	log.Printf("[sync] session %s: starting download of %d selected tracks", sessionID, session.Progress.Selected)
 
 	for i := range session.Tracks {
-		if ctx.Err() != nil {
-			p.setError(session, "canceled")
-			return ctx.Err()
+		if err := p.checkpoint(ctx, session, StatusDownloading); err != nil {
+			if session.Status != StatusCanceled {
+				p.setError(session, "canceled")
+			}
+			return err
 		}
 
 		p.mu.RLock()

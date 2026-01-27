@@ -13,6 +13,9 @@ var (
 	ErrTrackNotFound    = errors.New("track not found")
 	ErrNoMatch          = errors.New("track has no deezer match")
 	ErrDownloadActive   = errors.New("download already in progress")
+	ErrSessionPaused    = errors.New("session is paused")
+	ErrSessionNotPaused = errors.New("session is not paused")
+	ErrSessionCanceled  = errors.New("session is canceled")
 )
 
 // Session represents a single sync operation from a YouTube playlist.
@@ -59,6 +62,8 @@ const (
 	StatusDownloading = "downloading"
 	StatusDone        = "done"
 	StatusError       = "error"
+	StatusPaused      = "paused"
+	StatusCanceled    = "canceled"
 )
 
 // Track status constants.

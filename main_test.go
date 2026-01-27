@@ -245,3 +245,179 @@ func TestIsChannelURL(t *testing.T) {
 		}
 	}
 }
+
+// slowDX is a mock deemix client with configurable delay for testing pause/resume.
+type slowDX struct {
+	delay time.Duration
+}
+
+func (m *slowDX) Login(_ context.Context) error { return nil }
+func (m *slowDX) Search(ctx context.Context, _ string) ([]deemix.SearchResult, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(m.delay):
+	}
+	return []deemix.SearchResult{{ID: 1, Title: "Track", Artist: "Artist", Link: "https://www.deezer.com/track/1"}}, nil
+}
+func (m *slowDX) AddToQueue(ctx context.Context, _ string, _ int) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(m.delay):
+	}
+	return nil
+}
+
+func slowPipeline() *sync.Pipeline {
+	yt := &mockYT{
+		entries: []ytdlp.PlaylistEntry{
+			{Title: "Artist - Song 1", VideoID: "abc"},
+			{Title: "Artist - Song 2", VideoID: "def"},
+			{Title: "Artist - Song 3", VideoID: "ghi"},
+		},
+	}
+	return sync.NewPipeline(yt, &slowDX{delay: 50 * time.Millisecond}, nil)
+}
+
+func TestHandlePause(t *testing.T) {
+	pipeline := slowPipeline()
+	id := pipeline.Analyze(context.Background(), "https://youtube.com/playlist?list=test", deemix.Bitrate320, false)
+
+	// Wait for searching status.
+	for i := 0; i < 50; i++ {
+		time.Sleep(10 * time.Millisecond)
+		s, _ := pipeline.GetSession(id)
+		if s.Status == sync.StatusSearching {
+			break
+		}
+	}
+
+	handler := handlePause(pipeline)
+	req := httptest.NewRequest(http.MethodPost, "/api/session/"+id+"/pause", nil)
+	req.SetPathValue("id", id)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body: %s", w.Code, w.Body.String())
+	}
+
+	// Poll for pause to take effect.
+	var session *sync.Session
+	for i := 0; i < 50; i++ {
+		time.Sleep(20 * time.Millisecond)
+		session, _ = pipeline.GetSession(id)
+		if session.Status == sync.StatusPaused {
+			break
+		}
+	}
+
+	if session.Status != sync.StatusPaused {
+		t.Errorf("expected status 'paused', got %q", session.Status)
+	}
+}
+
+func TestHandleResume(t *testing.T) {
+	pipeline := slowPipeline()
+	id := pipeline.Analyze(context.Background(), "https://youtube.com/playlist?list=test", deemix.Bitrate320, false)
+
+	// Wait for searching status.
+	for i := 0; i < 50; i++ {
+		time.Sleep(10 * time.Millisecond)
+		s, _ := pipeline.GetSession(id)
+		if s.Status == sync.StatusSearching {
+			break
+		}
+	}
+
+	pipeline.PauseSession(id)
+
+	// Poll for pause to take effect.
+	for i := 0; i < 50; i++ {
+		time.Sleep(20 * time.Millisecond)
+		s, _ := pipeline.GetSession(id)
+		if s.Status == sync.StatusPaused {
+			break
+		}
+	}
+
+	// Verify it's paused before testing resume.
+	session, _ := pipeline.GetSession(id)
+	if session.Status != sync.StatusPaused {
+		t.Fatalf("expected status 'paused' before resume, got %q", session.Status)
+	}
+
+	handler := handleResume(pipeline)
+	req := httptest.NewRequest(http.MethodPost, "/api/session/"+id+"/resume", nil)
+	req.SetPathValue("id", id)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleCancel(t *testing.T) {
+	pipeline := slowPipeline()
+	id := pipeline.Analyze(context.Background(), "https://youtube.com/playlist?list=test", deemix.Bitrate320, false)
+
+	// Wait for searching to start.
+	time.Sleep(30 * time.Millisecond)
+
+	handler := handleCancel(pipeline)
+	req := httptest.NewRequest(http.MethodPost, "/api/session/"+id+"/cancel", nil)
+	req.SetPathValue("id", id)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body: %s", w.Code, w.Body.String())
+	}
+
+	// Wait for cancel to take effect.
+	time.Sleep(50 * time.Millisecond)
+
+	session, _ := pipeline.GetSession(id)
+	if session.Status != sync.StatusCanceled {
+		t.Errorf("expected status 'canceled', got %q", session.Status)
+	}
+}
+
+func TestHandlePauseNotFound(t *testing.T) {
+	pipeline := testPipeline()
+	handler := handlePause(pipeline)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/session/nonexistent/pause", nil)
+	req.SetPathValue("id", "nonexistent")
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestHandleResumeNotPaused(t *testing.T) {
+	pipeline := testPipeline()
+	id := pipeline.Analyze(context.Background(), "https://youtube.com/playlist?list=test", deemix.Bitrate320, false)
+
+	// Wait for ready.
+	time.Sleep(100 * time.Millisecond)
+
+	handler := handleResume(pipeline)
+	req := httptest.NewRequest(http.MethodPost, "/api/session/"+id+"/resume", nil)
+	req.SetPathValue("id", id)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}

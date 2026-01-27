@@ -8,6 +8,10 @@
   var bitrateSelect = document.getElementById("bitrateSelect");
   var analyzeBtn = document.getElementById("analyzeBtn");
   var downloadBtn = document.getElementById("downloadBtn");
+  var sessionControls = document.getElementById("sessionControls");
+  var pauseBtn = document.getElementById("pauseBtn");
+  var resumeBtn = document.getElementById("resumeBtn");
+  var cancelBtn = document.getElementById("cancelBtn");
   var errorMsg = document.getElementById("errorMsg");
   var progressEl = document.getElementById("progress");
   var phaseEl = document.getElementById("phase");
@@ -33,6 +37,7 @@
   var syncIndex = 0;
   var isAnalyzing = false;
   var isReady = false;
+  var isPaused = false;
   var currentTracks = [];
   var totalProgress = { searched: 0, selected: 0, queued: 0, skipped: 0, needs_review: 0, not_found: 0, total: 0 };
   var sortColumn = null;
@@ -188,6 +193,11 @@
   // Download button click.
   downloadBtn.addEventListener("click", startDownload);
 
+  // Pause/Resume/Cancel button clicks.
+  pauseBtn.addEventListener("click", pauseAllSessions);
+  resumeBtn.addEventListener("click", resumeAllSessions);
+  cancelBtn.addEventListener("click", cancelAllSessions);
+
   // Sortable column headers.
   var sortableHeaders = trackTable.querySelectorAll("th[data-sort]");
   for (var i = 0; i < sortableHeaders.length; i++) {
@@ -288,6 +298,7 @@
 
     isAnalyzing = true;
     isReady = false;
+    isPaused = false;
     syncIndex = 0;
     sessionIds = [];
     currentSessionId = null;
@@ -305,6 +316,7 @@
     progressEl.classList.add("active");
     resetCounts();
     hideError();
+    updateControlButtons();
 
     analyzeNext();
   }
@@ -351,9 +363,12 @@
     if (!isReady || sessionIds.length === 0) return;
 
     isReady = false;
+    isAnalyzing = true;
+    isPaused = false;
     analyzeBtn.disabled = true;
     downloadBtn.disabled = true;
     phaseEl.textContent = "downloading";
+    updateControlButtons();
 
     // Download from all sessions
     var downloadPromises = sessionIds.map(function (sid) {
@@ -372,8 +387,10 @@
       .catch(function (err) {
         showError(err.message || "Failed to start download");
         isReady = true;
+        isAnalyzing = false;
         analyzeBtn.disabled = false;
         downloadBtn.disabled = false;
+        updateControlButtons();
       });
   }
 
@@ -390,9 +407,14 @@
 
     Promise.all(promises)
       .then(function (sessions) {
-        // Check if all sessions are done
+        // Check if all sessions are done or canceled
         var allDone = sessions.every(function (s) {
-          return s.status === "done" || s.status === "error";
+          return s.status === "done" || s.status === "error" || s.status === "canceled";
+        });
+
+        // Check if any session is paused
+        var anyPaused = sessions.some(function (s) {
+          return s.status === "paused";
         });
 
         // Update progress from all sessions
@@ -427,21 +449,34 @@
         totalProgress = totals;
         renderTracks(sortTracks(currentTracks), null, false);
 
+        isPaused = anyPaused;
+        updateControlButtons();
+
+        if (anyPaused) {
+          phaseEl.textContent = "downloading (paused)";
+          phaseEl.classList.add("paused");
+        } else {
+          phaseEl.classList.remove("paused");
+        }
+
         if (allDone) {
           clearInterval(pollTimer);
           pollTimer = null;
           phaseEl.textContent = "done";
+          phaseEl.classList.remove("paused");
           downloadBtn.classList.remove("active");
           isAnalyzing = false;
+          isPaused = false;
           analyzeBtn.disabled = false;
           addBtn.disabled = false;
+          updateControlButtons();
 
           // Check for errors
           var errors = sessions.filter(function (s) { return s.status === "error"; });
           if (errors.length > 0) {
             showError("Some downloads failed");
           }
-        } else {
+        } else if (!anyPaused) {
           phaseEl.textContent = "downloading";
         }
       })
@@ -449,9 +484,90 @@
         clearInterval(pollTimer);
         pollTimer = null;
         isAnalyzing = false;
+        isPaused = false;
         analyzeBtn.disabled = false;
         addBtn.disabled = false;
+        updateControlButtons();
       });
+  }
+
+  function pauseAllSessions() {
+    if (sessionIds.length === 0) return;
+
+    var promises = sessionIds.map(function (sid) {
+      return fetch("/api/session/" + sid + "/pause", { method: "POST" })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.error); });
+          return resp.json();
+        })
+        .catch(function () {}); // Ignore errors for already paused/completed sessions
+    });
+
+    Promise.all(promises).then(function () {
+      isPaused = true;
+      updateControlButtons();
+    });
+  }
+
+  function resumeAllSessions() {
+    if (sessionIds.length === 0) return;
+
+    var promises = sessionIds.map(function (sid) {
+      return fetch("/api/session/" + sid + "/resume", { method: "POST" })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.error); });
+          return resp.json();
+        })
+        .catch(function () {}); // Ignore errors for non-paused sessions
+    });
+
+    Promise.all(promises).then(function () {
+      isPaused = false;
+      updateControlButtons();
+    });
+  }
+
+  function cancelAllSessions() {
+    if (sessionIds.length === 0) return;
+
+    var promises = sessionIds.map(function (sid) {
+      return fetch("/api/session/" + sid + "/cancel", { method: "POST" })
+        .then(function (resp) {
+          if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.error); });
+          return resp.json();
+        })
+        .catch(function () {}); // Ignore errors for already completed sessions
+    });
+
+    Promise.all(promises).then(function () {
+      // Stop polling and reset state
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      isAnalyzing = false;
+      isReady = false;
+      isPaused = false;
+      phaseEl.textContent = "canceled";
+      phaseEl.classList.remove("paused");
+      analyzeBtn.disabled = false;
+      downloadBtn.classList.remove("active");
+      downloadBtn.disabled = true;
+      addBtn.disabled = false;
+      updateControlButtons();
+    });
+  }
+
+  function updateControlButtons() {
+    // Show controls only during active operations
+    if (isAnalyzing || isPaused) {
+      sessionControls.classList.add("active");
+      pauseBtn.style.display = isPaused ? "none" : "inline-block";
+      resumeBtn.style.display = isPaused ? "inline-block" : "none";
+      cancelBtn.style.display = "inline-block";
+    } else {
+      sessionControls.classList.remove("active");
+    }
   }
 
   function startPolling() {
@@ -466,6 +582,20 @@
     fetch("/api/session/" + currentSessionId)
       .then(function (resp) { return resp.json(); })
       .then(function (session) {
+        // Handle paused state
+        if (session.status === "paused") {
+          isPaused = true;
+          updateControlButtons();
+          phaseEl.classList.add("paused");
+          var prefix = urlQueue.length > 1 ? "(" + (syncIndex + 1) + "/" + urlQueue.length + ") " : "";
+          phaseEl.textContent = prefix + "paused";
+          return;
+        } else {
+          isPaused = false;
+          phaseEl.classList.remove("paused");
+          updateControlButtons();
+        }
+
         renderSession(session, false);
         if (session.status === "ready") {
           clearInterval(pollTimer);
@@ -495,21 +625,28 @@
             // All done - show accumulated results
             isReady = true;
             isAnalyzing = false;
+            isPaused = false;
             analyzeBtn.disabled = false;
             downloadBtn.classList.add("active");
             downloadBtn.disabled = false;
             addBtn.disabled = false;
             phaseEl.textContent = "ready";
+            updateControlButtons();
             renderSession({ tracks: currentTracks, progress: totalProgress, status: "ready", id: null }, true);
             renderTracks(sortTracks(currentTracks), null, true);
           }
-        } else if (session.status === "done" || session.status === "error") {
+        } else if (session.status === "done" || session.status === "error" || session.status === "canceled") {
           clearInterval(pollTimer);
           pollTimer = null;
           isReady = false;
+          isPaused = false;
           downloadBtn.classList.remove("active");
+          updateControlButtons();
           if (session.status === "error") {
             showError(session.error || "Failed for: " + (urlQueue[syncIndex] ? urlQueue[syncIndex].url : currentSessionId));
+          }
+          if (session.status === "canceled") {
+            phaseEl.textContent = "canceled";
           }
           syncIndex++;
           if (isAnalyzing && syncIndex < urlQueue.length) {
@@ -525,6 +662,8 @@
         clearInterval(pollTimer);
         pollTimer = null;
         syncIndex++;
+        isPaused = false;
+        updateControlButtons();
         if (isAnalyzing && syncIndex < urlQueue.length) {
           analyzeNext();
         } else {

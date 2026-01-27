@@ -78,6 +78,9 @@ func main() {
 	mux.HandleFunc("POST /api/analyze", handleAnalyze(pipeline))
 	mux.HandleFunc("GET /api/session/{id}", handleGetSession(pipeline))
 	mux.HandleFunc("POST /api/session/{id}/download", handleDownload(pipeline))
+	mux.HandleFunc("POST /api/session/{id}/pause", handlePause(pipeline))
+	mux.HandleFunc("POST /api/session/{id}/resume", handleResume(pipeline))
+	mux.HandleFunc("POST /api/session/{id}/cancel", handleCancel(pipeline))
 	mux.HandleFunc("POST /api/session/{id}/track/{index}/select", handleSelectTrack(pipeline))
 	mux.HandleFunc("POST /api/session/{id}/track/{index}/search", handleSearchTrack(pipeline))
 	mux.HandleFunc("GET /api/channel/playlists", handleChannelPlaylists(ytClient))
@@ -391,5 +394,70 @@ func handleSearchTrack(pipeline *sync.Pipeline) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func handlePause(pipeline *sync.Pipeline) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID := r.PathValue("id")
+
+		if err := pipeline.PauseSession(sessionID); err != nil {
+			switch err {
+			case sync.ErrSessionNotFound:
+				http.Error(w, `{"error":"session not found"}`, http.StatusNotFound)
+			case sync.ErrSessionPaused:
+				http.Error(w, `{"error":"session is already paused"}`, http.StatusBadRequest)
+			case sync.ErrSessionNotReady:
+				http.Error(w, `{"error":"session is not in an active state"}`, http.StatusBadRequest)
+			default:
+				http.Error(w, `{"error":"failed to pause session"}`, http.StatusInternalServerError)
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"paused"}`))
+	}
+}
+
+func handleResume(pipeline *sync.Pipeline) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID := r.PathValue("id")
+
+		if err := pipeline.ResumeSession(sessionID); err != nil {
+			switch err {
+			case sync.ErrSessionNotFound:
+				http.Error(w, `{"error":"session not found"}`, http.StatusNotFound)
+			case sync.ErrSessionNotPaused:
+				http.Error(w, `{"error":"session is not paused"}`, http.StatusBadRequest)
+			default:
+				http.Error(w, `{"error":"failed to resume session"}`, http.StatusInternalServerError)
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"resumed"}`))
+	}
+}
+
+func handleCancel(pipeline *sync.Pipeline) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID := r.PathValue("id")
+
+		if err := pipeline.CancelSession(sessionID); err != nil {
+			switch err {
+			case sync.ErrSessionNotFound:
+				http.Error(w, `{"error":"session not found"}`, http.StatusNotFound)
+			case sync.ErrSessionCanceled:
+				http.Error(w, `{"error":"session is already in terminal state"}`, http.StatusBadRequest)
+			default:
+				http.Error(w, `{"error":"failed to cancel session"}`, http.StatusInternalServerError)
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"canceled"}`))
 	}
 }

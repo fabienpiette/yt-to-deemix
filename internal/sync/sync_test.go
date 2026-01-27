@@ -435,3 +435,260 @@ func TestBuildQuery(t *testing.T) {
 		}
 	}
 }
+
+// slowDeemixClient adds artificial delay to simulate slow API calls for pause/resume testing.
+type slowDeemixClient struct {
+	searchResults map[string][]deemix.SearchResult
+	queuedURLs    []string
+	delay         time.Duration
+}
+
+func (m *slowDeemixClient) Login(_ context.Context) error { return nil }
+
+func (m *slowDeemixClient) Search(ctx context.Context, query string) ([]deemix.SearchResult, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(m.delay):
+	}
+	if results, ok := m.searchResults[query]; ok {
+		return results, nil
+	}
+	return nil, nil
+}
+
+func (m *slowDeemixClient) AddToQueue(ctx context.Context, url string, _ int) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(m.delay):
+	}
+	m.queuedURLs = append(m.queuedURLs, url)
+	return nil
+}
+
+func TestPauseResumeAnalyze(t *testing.T) {
+	yt := &mockYTClient{
+		entries: []ytdlp.PlaylistEntry{
+			{Title: "Artist - Song 1"},
+			{Title: "Artist - Song 2"},
+			{Title: "Artist - Song 3"},
+		},
+	}
+	dx := &slowDeemixClient{
+		searchResults: map[string][]deemix.SearchResult{
+			"Artist Song 1": {{ID: 1, Title: "Song 1", Artist: "Artist", Link: "https://www.deezer.com/track/1"}},
+			"Artist Song 2": {{ID: 2, Title: "Song 2", Artist: "Artist", Link: "https://www.deezer.com/track/2"}},
+			"Artist Song 3": {{ID: 3, Title: "Song 3", Artist: "Artist", Link: "https://www.deezer.com/track/3"}},
+		},
+		delay: 50 * time.Millisecond,
+	}
+
+	pipeline := NewPipeline(yt, dx, nil)
+	pipeline.searchDelay = 10 * time.Millisecond
+
+	id := pipeline.Analyze(context.Background(), "url", deemix.Bitrate320, false)
+
+	// Wait for searching status.
+	time.Sleep(30 * time.Millisecond)
+
+	// Pause the session.
+	err := pipeline.PauseSession(id)
+	if err != nil {
+		t.Fatalf("PauseSession failed: %v", err)
+	}
+
+	// Wait for pause to take effect.
+	time.Sleep(100 * time.Millisecond)
+
+	session, _ := pipeline.GetSession(id)
+	if session.Status != StatusPaused {
+		t.Errorf("expected status 'paused', got %q", session.Status)
+	}
+
+	// Resume the session.
+	err = pipeline.ResumeSession(id)
+	if err != nil {
+		t.Fatalf("ResumeSession failed: %v", err)
+	}
+
+	// Wait for completion.
+	for i := 0; i < 100; i++ {
+		time.Sleep(20 * time.Millisecond)
+		session, _ = pipeline.GetSession(id)
+		if session.Status == StatusReady || session.Status == StatusError {
+			break
+		}
+	}
+
+	if session.Status != StatusReady {
+		t.Fatalf("expected status 'ready' after resume, got %q (error: %s)", session.Status, session.Error)
+	}
+	if session.Progress.Searched != 3 {
+		t.Errorf("expected 3 tracks searched, got %d", session.Progress.Searched)
+	}
+}
+
+func TestCancelAnalyze(t *testing.T) {
+	yt := &mockYTClient{
+		entries: []ytdlp.PlaylistEntry{
+			{Title: "Artist - Song 1"},
+			{Title: "Artist - Song 2"},
+			{Title: "Artist - Song 3"},
+		},
+	}
+	dx := &slowDeemixClient{
+		searchResults: map[string][]deemix.SearchResult{
+			"Artist Song 1": {{ID: 1, Title: "Song 1", Artist: "Artist", Link: "https://www.deezer.com/track/1"}},
+			"Artist Song 2": {{ID: 2, Title: "Song 2", Artist: "Artist", Link: "https://www.deezer.com/track/2"}},
+			"Artist Song 3": {{ID: 3, Title: "Song 3", Artist: "Artist", Link: "https://www.deezer.com/track/3"}},
+		},
+		delay: 50 * time.Millisecond,
+	}
+
+	pipeline := NewPipeline(yt, dx, nil)
+	pipeline.searchDelay = 10 * time.Millisecond
+
+	id := pipeline.Analyze(context.Background(), "url", deemix.Bitrate320, false)
+
+	// Wait for searching to start.
+	time.Sleep(30 * time.Millisecond)
+
+	// Cancel the session.
+	err := pipeline.CancelSession(id)
+	if err != nil {
+		t.Fatalf("CancelSession failed: %v", err)
+	}
+
+	// Wait for cancellation to complete.
+	time.Sleep(100 * time.Millisecond)
+
+	session, _ := pipeline.GetSession(id)
+	if session.Status != StatusCanceled {
+		t.Errorf("expected status 'canceled', got %q", session.Status)
+	}
+}
+
+func TestPauseResumeDownload(t *testing.T) {
+	yt := &mockYTClient{
+		entries: []ytdlp.PlaylistEntry{
+			{Title: "Artist - Song 1"},
+			{Title: "Artist - Song 2"},
+			{Title: "Artist - Song 3"},
+		},
+	}
+	dx := &slowDeemixClient{
+		searchResults: map[string][]deemix.SearchResult{
+			"Artist Song 1": {{ID: 1, Title: "Song 1", Artist: "Artist", Link: "https://www.deezer.com/track/1"}},
+			"Artist Song 2": {{ID: 2, Title: "Song 2", Artist: "Artist", Link: "https://www.deezer.com/track/2"}},
+			"Artist Song 3": {{ID: 3, Title: "Song 3", Artist: "Artist", Link: "https://www.deezer.com/track/3"}},
+		},
+		delay: 5 * time.Millisecond,
+	}
+
+	pipeline := NewPipeline(yt, dx, nil)
+	pipeline.searchDelay = 0
+	pipeline.queueDelay = 0
+
+	id := pipeline.Analyze(context.Background(), "url", deemix.Bitrate320, false)
+
+	// Wait for ready.
+	for i := 0; i < 100; i++ {
+		time.Sleep(10 * time.Millisecond)
+		s, _ := pipeline.GetSession(id)
+		if s.Status == StatusReady {
+			break
+		}
+	}
+
+	// Now slow down the queue for download test.
+	dx.delay = 50 * time.Millisecond
+
+	// Start download in goroutine.
+	go pipeline.Download(context.Background(), id)
+
+	// Wait for downloading to start.
+	time.Sleep(30 * time.Millisecond)
+
+	// Pause the download.
+	err := pipeline.PauseSession(id)
+	if err != nil {
+		t.Fatalf("PauseSession during download failed: %v", err)
+	}
+
+	// Wait for pause to take effect.
+	time.Sleep(100 * time.Millisecond)
+
+	session, _ := pipeline.GetSession(id)
+	if session.Status != StatusPaused {
+		t.Errorf("expected status 'paused' during download, got %q", session.Status)
+	}
+
+	// Resume the download.
+	err = pipeline.ResumeSession(id)
+	if err != nil {
+		t.Fatalf("ResumeSession during download failed: %v", err)
+	}
+
+	// Wait for completion.
+	for i := 0; i < 100; i++ {
+		time.Sleep(20 * time.Millisecond)
+		session, _ = pipeline.GetSession(id)
+		if session.Status == StatusDone || session.Status == StatusError {
+			break
+		}
+	}
+
+	if session.Status != StatusDone {
+		t.Fatalf("expected status 'done' after download resume, got %q", session.Status)
+	}
+	if session.Progress.Queued != 3 {
+		t.Errorf("expected 3 tracks queued, got %d", session.Progress.Queued)
+	}
+}
+
+func TestPauseErrors(t *testing.T) {
+	yt := &mockYTClient{entries: []ytdlp.PlaylistEntry{{Title: "Artist - Song"}}}
+	dx := &mockDeemixClient{
+		searchResults: map[string][]deemix.SearchResult{
+			"Artist Song": {{ID: 1, Title: "Song", Artist: "Artist", Link: "https://www.deezer.com/track/1"}},
+		},
+	}
+
+	pipeline := NewPipeline(yt, dx, nil)
+	pipeline.searchDelay = 0
+
+	// Test pausing non-existent session.
+	err := pipeline.PauseSession("nonexistent")
+	if err != ErrSessionNotFound {
+		t.Errorf("expected ErrSessionNotFound, got %v", err)
+	}
+
+	// Test resuming non-existent session.
+	err = pipeline.ResumeSession("nonexistent")
+	if err != ErrSessionNotFound {
+		t.Errorf("expected ErrSessionNotFound, got %v", err)
+	}
+
+	// Start a session and wait for ready.
+	id := pipeline.Analyze(context.Background(), "url", deemix.Bitrate320, false)
+	for i := 0; i < 50; i++ {
+		time.Sleep(10 * time.Millisecond)
+		s, _ := pipeline.GetSession(id)
+		if s.Status == StatusReady {
+			break
+		}
+	}
+
+	// Test pausing a ready (non-active) session.
+	err = pipeline.PauseSession(id)
+	if err != ErrSessionNotReady {
+		t.Errorf("expected ErrSessionNotReady for ready session, got %v", err)
+	}
+
+	// Test resuming a non-paused session.
+	err = pipeline.ResumeSession(id)
+	if err != ErrSessionNotPaused {
+		t.Errorf("expected ErrSessionNotPaused for ready session, got %v", err)
+	}
+}
