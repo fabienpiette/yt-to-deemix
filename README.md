@@ -37,7 +37,7 @@ You have a YouTube playlist or a song link. You want those tracks on your server
 
 ## Requirements
 
-- A running [Deemix](https://gitlab.com/Bockaj/deemix-docker) instance
+- A running Deemix instance
 - A Deezer ARL token (grab from your browser cookies on deezer.com)
 - Docker (recommended) or Go 1.24+ and yt-dlp installed locally
 
