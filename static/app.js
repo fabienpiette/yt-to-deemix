@@ -294,13 +294,13 @@
 
   // Select all checkbox.
   selectAllCheckbox.addEventListener("change", function () {
-    if (!isReady || !sessionId) return;
+    if (!isReady) return;
     var checked = selectAllCheckbox.checked;
     var checkboxes = trackBody.querySelectorAll("input.track-select");
     for (var i = 0; i < checkboxes.length; i++) {
       if (checkboxes[i].checked !== checked && !checkboxes[i].disabled) {
         checkboxes[i].checked = checked;
-        toggleTrackSelection(sessionId, parseInt(checkboxes[i].dataset.index, 10), checked);
+        toggleTrackSelection(checkboxes[i].dataset.sid, parseInt(checkboxes[i].dataset.index, 10), checked);
       }
     }
   });
