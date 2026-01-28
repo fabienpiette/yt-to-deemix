@@ -91,6 +91,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          pattern: ytToDeemix-*
           path: artifacts
           merge-multiple: true
       - name: Create release
