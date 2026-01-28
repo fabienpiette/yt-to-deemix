@@ -745,7 +745,7 @@
       checkbox.checked = t.selected;
       checkbox.dataset.index = t._originalIndex !== undefined ? t._originalIndex : i;
       checkbox.dataset.sid = trackSid;
-      checkbox.disabled = !editable || t.status === "skipped" || t.status === "queued";
+      checkbox.disabled = !editable || t.status === "queued";
       checkbox.addEventListener("change", function () {
         toggleTrackSelection(this.dataset.sid, parseInt(this.dataset.index, 10), this.checked);
       });
@@ -784,8 +784,8 @@
         matchSpan.textContent = resultText;
         tdResult.appendChild(matchSpan);
 
-        // Add search button for needs_review tracks
-        if (editable && t.status === "needs_review") {
+        // Add search button for needs_review and skipped tracks
+        if (editable && (t.status === "needs_review" || t.status === "skipped")) {
           var searchBtn = document.createElement("button");
           searchBtn.className = "search-btn";
           searchBtn.textContent = "\u270E"; // pencil icon
