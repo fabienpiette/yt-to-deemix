@@ -202,31 +202,25 @@ button:disabled {
   border-color: var(--muted);
 }
 
-.session-controls {
+.cancel-btn {
   display: none;
-  gap: 0.25rem;
-}
-
-.session-controls.active {
-  display: inline-flex;
-}
-
-.session-controls button {
-  padding: 0.3rem 0.5rem;
-  font-size: 0.8rem;
+  width: 2rem;
+  height: auto;
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
   background: var(--bg);
   color: var(--muted);
   border: 1px solid var(--border);
 }
 
-.session-controls button:hover {
-  color: var(--fg);
-  border-color: var(--fg);
+.cancel-btn.active {
+  display: inline-block;
 }
 
-#cancelBtn:hover {
-  color: #c33;
+.cancel-btn:hover {
+  background: #c33;
   border-color: #c33;
+  color: #fff;
 }
 
 .nav-toggle {
@@ -284,7 +278,6 @@ button:disabled {
   display: none;
   flex: 1;
   min-height: 200px;
-  max-height: 400px;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -292,13 +285,15 @@ button:disabled {
 }
 
 .track-container.active {
-  display: block;
+  display: flex;
+  flex-direction: column;
 }
 
 .track-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+  flex: 1;
 }
 
 .track-table thead {
@@ -346,43 +341,99 @@ button:disabled {
 
 .track-table th.col-select,
 .track-table td.col-select {
-  width: 2rem;
+  width: 2.5rem;
+  padding: 0.6rem 0.4rem;
   text-align: center;
-  padding: 0.5rem 0.4rem;
+  vertical-align: middle;
 }
 
-.track-table .track-select {
+/* Custom checkbox styling for black & white theme */
+.track-table input[type="checkbox"],
+input#selectAll {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  min-height: 14px;
+  border: 2px solid var(--muted);
+  border-radius: 2px;
+  background: transparent;
   cursor: pointer;
-  width: 1rem;
-  height: 1rem;
+  position: relative;
+  margin: 0;
+  padding: 0;
+  display: inline-block;
+  flex-shrink: 0;
 }
 
-.track-table .track-select:disabled {
+.track-table input[type="checkbox"]:checked,
+input#selectAll:checked {
+  background: var(--fg);
+  border-color: var(--fg);
+}
+
+.track-table input[type="checkbox"]:checked::after,
+input#selectAll:checked::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--bg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.track-table input[type="checkbox"]:disabled {
   cursor: not-allowed;
   opacity: 0.4;
 }
 
+.track-table input[type="checkbox"]:indeterminate,
+input#selectAll:indeterminate {
+  background: var(--fg);
+  border-color: var(--fg);
+}
+
+.track-table input[type="checkbox"]:indeterminate::after,
+input#selectAll:indeterminate::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 4px;
+  width: 6px;
+  height: 2px;
+  background: var(--bg);
+  transform: none;
+  border: none;
+}
+
 .track-table td {
-  padding: 0.5rem 0.8rem;
+  padding: 0.6rem 0.8rem;
   border-bottom: 1px solid var(--border);
   font-family: ui-monospace, monospace;
   font-size: 0.8rem;
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 .track-title {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+  line-height: 1.4;
 }
 
 .track-artist {
+  display: block;
   font-size: 0.7rem;
   color: var(--muted);
+  line-height: 1.3;
 }
 
 .track-song {
+  display: block;
   font-size: 0.8rem;
+  line-height: 1.3;
 }
 
 .track-table tr:last-child td {

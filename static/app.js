@@ -8,9 +8,6 @@
   var bitrateSelect = document.getElementById("bitrateSelect");
   var analyzeBtn = document.getElementById("analyzeBtn");
   var downloadBtn = document.getElementById("downloadBtn");
-  var sessionControls = document.getElementById("sessionControls");
-  var pauseBtn = document.getElementById("pauseBtn");
-  var resumeBtn = document.getElementById("resumeBtn");
   var cancelBtn = document.getElementById("cancelBtn");
   var errorMsg = document.getElementById("errorMsg");
   var progressEl = document.getElementById("progress");
@@ -187,16 +184,27 @@
     }
   }
 
-  // Analyze button click.
-  analyzeBtn.addEventListener("click", startAnalyzeAll);
+  // Analyze button click - toggles between analyze/pause/resume.
+  analyzeBtn.addEventListener("click", handleAnalyzeClick);
 
   // Download button click.
   downloadBtn.addEventListener("click", startDownload);
 
-  // Pause/Resume/Cancel button clicks.
-  pauseBtn.addEventListener("click", pauseAllSessions);
-  resumeBtn.addEventListener("click", resumeAllSessions);
+  // Cancel button click.
   cancelBtn.addEventListener("click", cancelAllSessions);
+
+  function handleAnalyzeClick() {
+    if (isPaused) {
+      // Resume
+      resumeAllSessions();
+    } else if (isAnalyzing) {
+      // Pause
+      pauseAllSessions();
+    } else {
+      // Start new analysis
+      startAnalyzeAll();
+    }
+  }
 
   // Sortable column headers.
   var sortableHeaders = trackTable.querySelectorAll("th[data-sort]");
@@ -210,8 +218,8 @@
         sortAsc = true;
       }
       updateSortIndicators();
-      if (currentTracks.length > 0 && sessionId) {
-        renderTracks(sortTracks(currentTracks), sessionId, isReady);
+      if (currentTracks.length > 0) {
+        renderTracks(sortTracks(currentTracks), null, isReady);
       }
     });
   }
@@ -307,7 +315,6 @@
     sortColumn = null;
     sortAsc = true;
     updateSortIndicators();
-    analyzeBtn.disabled = true;
     downloadBtn.classList.remove("active");
     downloadBtn.disabled = true;
     addBtn.disabled = true;
@@ -325,8 +332,8 @@
     if (syncIndex >= urlQueue.length) {
       // All analyzed - if last session is ready, show download button.
       isAnalyzing = false;
-      analyzeBtn.disabled = false;
       addBtn.disabled = false;
+      updateControlButtons();
       urlQueue = [];
       renderQueue();
       return;
@@ -365,7 +372,7 @@
     isReady = false;
     isAnalyzing = true;
     isPaused = false;
-    analyzeBtn.disabled = true;
+    
     downloadBtn.disabled = true;
     phaseEl.textContent = "downloading";
     updateControlButtons();
@@ -388,7 +395,7 @@
         showError(err.message || "Failed to start download");
         isReady = true;
         isAnalyzing = false;
-        analyzeBtn.disabled = false;
+        
         downloadBtn.disabled = false;
         updateControlButtons();
       });
@@ -467,7 +474,7 @@
           downloadBtn.classList.remove("active");
           isAnalyzing = false;
           isPaused = false;
-          analyzeBtn.disabled = false;
+          
           addBtn.disabled = false;
           updateControlButtons();
 
@@ -485,7 +492,7 @@
         pollTimer = null;
         isAnalyzing = false;
         isPaused = false;
-        analyzeBtn.disabled = false;
+        
         addBtn.disabled = false;
         updateControlButtons();
       });
@@ -550,7 +557,7 @@
       isPaused = false;
       phaseEl.textContent = "canceled";
       phaseEl.classList.remove("paused");
-      analyzeBtn.disabled = false;
+      
       downloadBtn.classList.remove("active");
       downloadBtn.disabled = true;
       addBtn.disabled = false;
@@ -559,14 +566,16 @@
   }
 
   function updateControlButtons() {
-    // Show controls only during active operations
-    if (isAnalyzing || isPaused) {
-      sessionControls.classList.add("active");
-      pauseBtn.style.display = isPaused ? "none" : "inline-block";
-      resumeBtn.style.display = isPaused ? "inline-block" : "none";
-      cancelBtn.style.display = "inline-block";
+    // Update analyze button text based on state
+    if (isPaused) {
+      analyzeBtn.textContent = "resume";
+      cancelBtn.classList.add("active");
+    } else if (isAnalyzing) {
+      analyzeBtn.textContent = "pause";
+      cancelBtn.classList.add("active");
     } else {
-      sessionControls.classList.remove("active");
+      analyzeBtn.textContent = "analyze";
+      cancelBtn.classList.remove("active");
     }
   }
 
@@ -626,7 +635,7 @@
             isReady = true;
             isAnalyzing = false;
             isPaused = false;
-            analyzeBtn.disabled = false;
+            
             downloadBtn.classList.add("active");
             downloadBtn.disabled = false;
             addBtn.disabled = false;
@@ -653,8 +662,8 @@
             analyzeNext();
           } else {
             isAnalyzing = false;
-            analyzeBtn.disabled = false;
             addBtn.disabled = false;
+            updateControlButtons();
           }
         }
       })
@@ -663,13 +672,12 @@
         pollTimer = null;
         syncIndex++;
         isPaused = false;
-        updateControlButtons();
         if (isAnalyzing && syncIndex < urlQueue.length) {
           analyzeNext();
         } else {
           isAnalyzing = false;
-          analyzeBtn.disabled = false;
           addBtn.disabled = false;
+          updateControlButtons();
         }
       });
   }
@@ -702,9 +710,14 @@
     if (session.tracks && session.tracks.length > 0) {
       trackContainer.classList.add("active");
       // Preserve original indices and session ID for API calls
+      // Only set if not already set (for accumulated tracks from multiple sessions)
       for (var i = 0; i < session.tracks.length; i++) {
-        session.tracks[i]._originalIndex = i;
-        session.tracks[i]._sessionId = session.id;
+        if (session.tracks[i]._originalIndex === undefined) {
+          session.tracks[i]._originalIndex = i;
+        }
+        if (!session.tracks[i]._sessionId && session.id) {
+          session.tracks[i]._sessionId = session.id;
+        }
       }
       // During analysis, show only current session tracks
       // Final accumulated tracks are built when session reaches ready
