@@ -185,21 +185,65 @@ button:disabled {
 
 #downloadBtn {
   display: none;
-  background: #2a2;
-  border-color: #2a2;
+  background: var(--fg);
+  color: var(--bg);
+  border: 2px solid var(--fg);
+  font-weight: 500;
+  position: relative;
+  overflow: hidden;
 }
 
 #downloadBtn.active {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  animation: download-ready 0.3s ease-out;
 }
 
 #downloadBtn:hover {
-  opacity: 0.9;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+#downloadBtn:hover .download-icon {
+  animation: bounce-down 0.4s ease-in-out;
 }
 
 #downloadBtn:disabled {
-  background: var(--muted);
-  border-color: var(--muted);
+  background: var(--bg);
+  color: var(--muted);
+  border-color: var(--border);
+  cursor: not-allowed;
+}
+
+#downloadBtn:disabled .download-icon {
+  animation: none;
+}
+
+.download-icon {
+  font-size: 1rem;
+  line-height: 1;
+  display: inline-block;
+}
+
+@keyframes download-ready {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bounce-down {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(3px);
+  }
 }
 
 .cancel-btn {
