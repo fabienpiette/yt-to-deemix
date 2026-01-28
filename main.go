@@ -87,7 +87,7 @@ func main() {
 	mux.HandleFunc("GET /api/url/info", handleURLInfo(ytClient))
 	mux.HandleFunc("GET /api/stats", handleStats)
 	mux.HandleFunc("GET /api/navidrome/status", handleNavidromeStatus(navidromeConfigured, navidromeSkipDefault))
-	mux.Handle("GET /", http.FileServer(http.Dir("static")))
+	mux.Handle("GET /", staticHandler())
 
 	log.Printf("Starting server on :%s", port)
 	if err := http.ListenAndServe(":"+port, mux); err != nil {

@@ -10,7 +10,6 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates python3 py3-pip && \
     pip3 install --break-system-packages yt-dlp
 COPY --from=builder /app/ytToDeemix /app/ytToDeemix
-COPY --from=builder /app/static /app/static
 WORKDIR /app
 EXPOSE 8080
 CMD ["./ytToDeemix"]

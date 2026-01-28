@@ -6,7 +6,7 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 LDFLAGS := -ldflags="-s -w -X main.version=$(VERSION)"
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
-.PHONY: build run test test-coverage fmt clean build-all
+.PHONY: build run dev test test-coverage fmt clean build-all
 .PHONY: docker-build docker-push docker-release
 .PHONY: up down logs
 .PHONY: version bump-patch bump-minor bump-major
@@ -17,6 +17,9 @@ build:
 
 run: build
 	./$(BINARY)
+
+dev: build
+	DEV=1 ./$(BINARY)
 
 test:
 	go test -v -race -count=1 ./...
