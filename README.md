@@ -72,6 +72,7 @@ services:
 | `NAVIDROME_PASSWORD` | no | - | Navidrome password |
 | `NAVIDROME_MATCH_MODE` | no | `substring` | How to match tracks: `substring`, `exact`, or `fuzzy` |
 | `NAVIDROME_SKIP_DEFAULT` | no | `false` | Enable "skip existing" toggle by default |
+| `DEV` | no | - | Set to `1` to serve static files from disk (for development) |
 
 All three `NAVIDROME_*` connection variables must be set to enable the skip-if-exists feature. When enabled, a toggle appears in the UI to opt in per sync.
 
@@ -88,11 +89,14 @@ make run
 ## Development
 
 ```bash
+make dev            # Run with live reload (serves static files from disk)
 make test           # Run tests with race detector
 make test-coverage  # Run tests with coverage report
 make fmt            # Check formatting
 make build-all      # Cross-compile for all platforms
 ```
+
+Static assets (CSS, JS, SVG) are embedded in the binary and minified + gzipped at startup. Use `make dev` during development to serve files from disk without rebuilding.
 
 ## API
 
