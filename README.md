@@ -8,7 +8,7 @@ You have a YouTube playlist or a song link. You want those tracks on your server
 [![Go Version](https://img.shields.io/github/go-mod/go-version/fabienpiette/yt-to-deemix)](go.mod)
 [![Tag](https://img.shields.io/github/v/tag/fabienpiette/yt-to-deemix)](https://github.com/fabienpiette/yt-to-deemix/tags)
 
-![ytToDeemix dashboard showing playlist sync results](docs/screenshot-light.png)
+![ytToDeemix dashboard showing playlist sync results](docs/screenshot-light.gif)
 
 <p align="center">
 <a href="https://buymeacoffee.com/fabienpiette" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="60"></a>
