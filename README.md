@@ -57,7 +57,7 @@ Open `http://localhost:8080` in your browser.
 ```yaml
 services:
   yttodeemix:
-    image: ghcr.io/fabienpiette/yttodeemix:${YTTODEEMIX_VERSION:-latest}
+    image: ghcr.io/fabienpiette/yt-to-deemix:${YTTODEEMIX_VERSION:-latest}
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -81,7 +81,7 @@ services:
 ```yaml
 services:
   yttodeemix:
-    image: ghcr.io/fabienpiette/yttodeemix:${YTTODEEMIX_VERSION:-latest}
+    image: ghcr.io/fabienpiette/yt-to-deemix:${YTTODEEMIX_VERSION:-latest}
     restart: unless-stopped
     ports:
       - "8080:8080"
