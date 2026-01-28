@@ -57,18 +57,72 @@ Open `http://localhost:8080` in your browser.
 ```yaml
 services:
   yttodeemix:
-    image: ghcr.io/fabienpiette/yttodeemix:latest
+    image: ghcr.io/fabienpiette/yttodeemix:${YTTODEEMIX_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - DEEMIX_URL=http://deemix:6595 # Deemix instance URL (required)
+      - DEEMIX_ARL=your_arl_token_here # Deezer ARL token for authentication (required)
+      # Optional:
+      # - PORT=8080 # Web server port (optional, default: 8080)
+      # - CONFIDENCE_THRESHOLD=70 # Confidence threshold for auto-queuing (optional, default: 70)
+      #
+      # Navidrome / Subsonic integration (optional)
+      # - NAVIDROME_URL=http://navidrome:4533
+      # - NAVIDROME_USER=admin
+      # - NAVIDROME_PASSWORD=secret
+      # - NAVIDROME_MATCH_MODE=substring # Match mode: "substring" (default), "exact", or "fuzzy" (Levenshtein similarity >= 80%)
+      # - NAVIDROME_SKIP_DEFAULT=false # Enable "skip existing" toggle by default (optional, default: false)
+```
+
+### Full stack example (with Deemix and Navidrome)
+
+```yaml
+services:
+  yttodeemix:
+    image: ghcr.io/fabienpiette/yttodeemix:${YTTODEEMIX_VERSION:-latest}
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
       - DEEMIX_URL=http://deemix:6595
-      - DEEMIX_ARL=your_arl_token_here
-      # Optional: Navidrome integration
-      # - NAVIDROME_URL=http://navidrome:4533
-      # - NAVIDROME_USER=admin
-      # - NAVIDROME_PASSWORD=secret
-      # - NAVIDROME_MATCH_MODE=substring
+      - DEEMIX_ARL=${DEEMIX_ARL}
+      - CONFIDENCE_THRESHOLD=70
+      - NAVIDROME_URL=http://navidrome:4533
+      - NAVIDROME_USER=${NAVIDROME_USER}
+      - NAVIDROME_PASSWORD=${NAVIDROME_PASSWORD}
+      - NAVIDROME_SKIP_DEFAULT=true
+    depends_on:
+      - deemix
+      - navidrome
+
+  deemix:
+    image: ghcr.io/bambanah/deemix:${DEEMIX_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "6595:6595"
+    volumes:
+      - ./downloads:/downloads
+      - ./deemix-config:/config
+    environment:
+      - DEEMIX_SERVER_PORT=6595
+      - DEEMIX_DATA_DIR=/config
+      - DEEMIX_MUSIC_DIR=/downloads
+      - DEEMIX_HOST=0.0.0.0
+      - DEEMIX_SINGLE_USER=true
+      - PUID=1000
+      - PGID=1000
+      - UMASK_SET=022
+
+  navidrome:
+    image: deluan/navidrome:${NAVIDROME_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "4533:4533"
+    volumes:
+      - ./downloads:/music:ro
+      - ./navidrome-data:/data
 ```
 
 ## Configuration
