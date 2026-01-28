@@ -97,6 +97,7 @@
 
   function fetchURLInfo(url) {
     addBtn.disabled = true;
+    addBtn.classList.add("loading");
     addBtn.textContent = "loading...";
 
     fetch("/api/url/info?url=" + encodeURIComponent(url))
@@ -112,12 +113,14 @@
       })
       .finally(function () {
         addBtn.disabled = false;
+        addBtn.classList.remove("loading");
         addBtn.textContent = "add";
       });
   }
 
   function fetchChannelPlaylists(channelURL) {
     addBtn.disabled = true;
+    addBtn.classList.add("loading");
     addBtn.textContent = "loading...";
 
     fetch("/api/channel/playlists?url=" + encodeURIComponent(channelURL))
@@ -140,6 +143,7 @@
       })
       .finally(function () {
         addBtn.disabled = false;
+        addBtn.classList.remove("loading");
         addBtn.textContent = "add";
       });
   }
