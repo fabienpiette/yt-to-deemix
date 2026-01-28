@@ -882,7 +882,24 @@
     })
       .then(function (resp) {
         if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.error); });
-        pollSession(); // Refresh to show new match
+        return resp.json();
+      })
+      .then(function (data) {
+        // Update the specific track in currentTracks with new match data
+        for (var i = 0; i < currentTracks.length; i++) {
+          if (currentTracks[i]._sessionId === sid && currentTracks[i]._originalIndex === index) {
+            currentTracks[i].deezer_match = data.deezer_match;
+            currentTracks[i].confidence = data.confidence;
+            // Update status based on confidence
+            if (data.deezer_match) {
+              currentTracks[i].status = data.confidence >= 70 ? "found" : "needs_review";
+              currentTracks[i].selected = data.confidence >= 70;
+            }
+            break;
+          }
+        }
+        // Re-render with updated tracks
+        renderTracks(sortTracks(currentTracks), null, isReady);
       })
       .catch(function (err) {
         showError(err.message || "Search failed");
