@@ -984,7 +984,7 @@
       .then(function (data) {
         var mem = data.memory_mb.toFixed(1);
         var uptime = formatUptime(data.uptime_sec);
-        statsEl.textContent = mem + " MB / " + data.goroutines + " goroutines / up " + uptime;
+        statsEl.textContent = data.version + " \u00b7 " + mem + " MB \u00b7 " + data.goroutines + " goroutines \u00b7 up " + uptime;
       })
       .catch(function () {});
   }

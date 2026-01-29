@@ -63,6 +63,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           push: true
+          build-args: |
+            VERSION=${{ github.ref_name }}
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ghcr.io/${{ github.repository }}:latest
@@ -81,6 +83,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           push: true
+          build-args: |
+            VERSION=${{ github.ref_name }}
           tags: |
             ${{ vars.DOCKERHUB_USERNAME }}/yttoDeemix:${{ github.ref_name }}
             ${{ vars.DOCKERHUB_USERNAME }}/yttoDeemix:latest

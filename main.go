@@ -17,6 +17,7 @@ import (
 	"github.com/gndm/ytToDeemix/internal/ytdlp"
 )
 
+var version = "dev"
 var startTime = time.Now()
 
 func main() {
@@ -146,6 +147,7 @@ func handleGetSession(pipeline *sync.Pipeline) http.HandlerFunc {
 }
 
 type statsResponse struct {
+	Version    string  `json:"version"`
 	MemoryMB   float64 `json:"memory_mb"`
 	Goroutines int     `json:"goroutines"`
 	UptimeSec  float64 `json:"uptime_sec"`
@@ -156,6 +158,7 @@ func handleStats(w http.ResponseWriter, _ *http.Request) {
 	runtime.ReadMemStats(&m)
 
 	stats := statsResponse{
+		Version:    version,
 		MemoryMB:   float64(m.Alloc) / 1024 / 1024,
 		Goroutines: runtime.NumGoroutine(),
 		UptimeSec:  time.Since(startTime).Seconds(),
