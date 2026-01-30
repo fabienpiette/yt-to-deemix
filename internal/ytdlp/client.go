@@ -34,7 +34,12 @@ func (c *CommandClient) GetPlaylist(ctx context.Context, playlistURL string) ([]
 		bin = "yt-dlp"
 	}
 
-	args := []string{"--dump-json", "--no-warnings"}
+	// For YouTube Music, use hybrid approach: flat first, then full metadata.
+	if isPlaylistURL(playlistURL) && isYouTubeMusicURL(playlistURL) {
+		return c.getYouTubeMusicPlaylist(ctx, bin, playlistURL)
+	}
+
+	args := []string{"--dump-json", "--no-warnings", "--ignore-errors"}
 	if isPlaylistURL(playlistURL) {
 		args = append(args, "--flat-playlist")
 	} else {
@@ -42,17 +47,57 @@ func (c *CommandClient) GetPlaylist(ctx context.Context, playlistURL string) ([]
 	}
 	args = append(args, playlistURL)
 
+	return c.runYtdlp(ctx, bin, args, playlistURL)
+}
+
+// getYouTubeMusicPlaylist fetches YouTube Music playlists with full metadata.
+// First fetches flat playlist for complete list, then fetches full metadata.
+// Falls back to flat data for videos that fail full fetch.
+func (c *CommandClient) getYouTubeMusicPlaylist(ctx context.Context, bin, playlistURL string) ([]PlaylistEntry, error) {
+	// Step 1: Get flat playlist (fast, complete list).
+	flatArgs := []string{"--dump-json", "--no-warnings", "--flat-playlist", playlistURL}
+	flatEntries, err := c.runYtdlp(ctx, bin, flatArgs, playlistURL)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 2: Get full metadata (slower, may fail for some videos).
+	fullArgs := []string{"--dump-json", "--no-warnings", "--ignore-errors", playlistURL}
+	fullEntries, _ := c.runYtdlp(ctx, bin, fullArgs, playlistURL)
+
+	// Build map of full entries by video ID.
+	fullMap := make(map[string]PlaylistEntry)
+	for _, e := range fullEntries {
+		if e.VideoID != "" {
+			fullMap[e.VideoID] = e
+		}
+	}
+
+	// Merge: prefer full metadata, fallback to flat.
+	result := make([]PlaylistEntry, 0, len(flatEntries))
+	for _, flat := range flatEntries {
+		if full, ok := fullMap[flat.VideoID]; ok {
+			result = append(result, full)
+		} else {
+			result = append(result, flat)
+		}
+	}
+
+	log.Printf("[ytdlp] YouTube Music: %d entries (%d with full metadata)", len(result), len(fullEntries))
+	return result, nil
+}
+
+// runYtdlp executes yt-dlp and parses the JSON output.
+func (c *CommandClient) runYtdlp(ctx context.Context, bin string, args []string, url string) ([]PlaylistEntry, error) {
 	cmd := exec.CommandContext(ctx, bin, args...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	if err := cmd.Run(); err != nil {
-		log.Printf("[ytdlp] command failed for %s: %v", playlistURL, err)
-		return nil, fmt.Errorf("yt-dlp failed: %w: %s", err, stderr.String())
-	}
+	runErr := cmd.Run()
 
+	// Parse output even if command failed (some videos may have succeeded).
 	var entries []PlaylistEntry
 	dec := json.NewDecoder(&stdout)
 	for {
@@ -60,9 +105,16 @@ func (c *CommandClient) GetPlaylist(ctx context.Context, playlistURL string) ([]
 		if err := dec.Decode(&entry); err == io.EOF {
 			break
 		} else if err != nil {
-			return nil, fmt.Errorf("failed to parse yt-dlp output: %w", err)
+			// Skip malformed entries, continue parsing.
+			continue
 		}
 		entries = append(entries, entry)
+	}
+
+	// Only fail if command failed AND we got no entries.
+	if runErr != nil && len(entries) == 0 {
+		log.Printf("[ytdlp] command failed for %s: %v", url, runErr)
+		return nil, fmt.Errorf("yt-dlp failed: %w: %s", runErr, stderr.String())
 	}
 
 	return entries, nil
@@ -70,6 +122,10 @@ func (c *CommandClient) GetPlaylist(ctx context.Context, playlistURL string) ([]
 
 func isPlaylistURL(url string) bool {
 	return strings.Contains(url, "list=")
+}
+
+func isYouTubeMusicURL(url string) bool {
+	return strings.Contains(url, "music.youtube.com")
 }
 
 // GetChannelPlaylists fetches all playlist URLs from a YouTube channel.

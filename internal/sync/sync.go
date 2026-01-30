@@ -126,7 +126,24 @@ func (p *Pipeline) run(ctx context.Context, session *Session) {
 	session.Tracks = make([]Track, len(entries))
 	session.Progress.Total = len(entries)
 	for i, entry := range entries {
-		artist, song := parser.Parse(entry.Title)
+		var artist, song string
+
+		// Priority 1: yt-dlp artist/track fields (YouTube Music metadata).
+		if entry.Artist != "" {
+			artist = entry.Artist
+			if entry.Track != "" {
+				song = entry.Track
+			} else {
+				song = entry.Title
+			}
+		} else {
+			// Priority 2: Parse from title (handles "Artist - Song" format).
+			artist, song = parser.Parse(entry.Title)
+			// Note: We don't use channel as fallback because it's often
+			// unreliable (could be uploader, label, band member, etc.).
+			// Better to search with just title than wrong artist.
+		}
+
 		session.Tracks[i] = Track{
 			YouTubeTitle: entry.Title,
 			ParsedArtist: artist,
@@ -385,6 +402,7 @@ func buildQuery(artist, song string) string {
 	return artist + " " + song
 }
 
+// cleanChannel removes common noise from YouTube channel names.
 func generateID() string {
 	b := make([]byte, 8)
 	rand.Read(b)
@@ -507,9 +525,12 @@ func (p *Pipeline) SearchTrack(ctx context.Context, sessionID string, trackIndex
 		return ErrTrackNotFound
 	}
 	checkNavidrome := session.CheckNavidrome
+	parsedArtist := session.Tracks[trackIndex].ParsedArtist
 	p.mu.Unlock()
 
-	results, err := p.deemixClient.Search(ctx, query)
+	// Combine parsed artist with user query for better Deezer results.
+	searchQuery := buildQuery(parsedArtist, query)
+	results, err := p.deemixClient.Search(ctx, searchQuery)
 	if err != nil {
 		return err
 	}
