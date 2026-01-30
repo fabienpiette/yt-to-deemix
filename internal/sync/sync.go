@@ -506,6 +506,7 @@ func (p *Pipeline) SearchTrack(ctx context.Context, sessionID string, trackIndex
 		p.mu.Unlock()
 		return ErrTrackNotFound
 	}
+	checkNavidrome := session.CheckNavidrome
 	p.mu.Unlock()
 
 	results, err := p.deemixClient.Search(ctx, query)
@@ -513,19 +514,29 @@ func (p *Pipeline) SearchTrack(ctx context.Context, sessionID string, trackIndex
 		return err
 	}
 
+	// Check Navidrome for the new match (outside lock).
+	var existsInNavidrome bool
+	if len(results) > 0 && p.navidromeClient != nil && checkNavidrome {
+		match := results[0]
+		navResults, err := p.navidromeClient.Search(ctx, match.Artist, match.Title)
+		if err == nil && len(navResults) > 0 {
+			existsInNavidrome = true
+		}
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	track := &session.Tracks[trackIndex]
-	wasNotFound := track.Status == TrackNotFound
-	hadMatch := track.DeezerMatch != nil
+	prevStatus := track.Status
 
 	if len(results) == 0 {
 		track.DeezerMatch = nil
 		track.Confidence = 0
-		if !wasNotFound {
+		if prevStatus != TrackNotFound {
 			track.Status = TrackNotFound
-			session.Progress.NotFound++
+			p.updateProgressForStatusChange(session, prevStatus, TrackNotFound, track.Selected)
+			track.Selected = false
 		}
 		return nil
 	}
@@ -533,16 +544,53 @@ func (p *Pipeline) SearchTrack(ctx context.Context, sessionID string, trackIndex
 	match := results[0]
 	track.DeezerMatch = &match
 	track.Confidence = calculateConfidence(track.ParsedArtist, track.ParsedSong, match.Artist, match.Title)
-	track.Status = TrackFound
 
-	// Update progress counts
-	if wasNotFound {
-		session.Progress.NotFound--
-	}
-	if !hadMatch && track.Status == TrackNeedsReview {
-		session.Progress.NeedsReview--
+	var newStatus string
+	if existsInNavidrome {
+		newStatus = TrackSkipped
+		track.Selected = false
+	} else if track.Confidence >= p.confidenceThreshold {
+		newStatus = TrackFound
+		track.Selected = true
+	} else {
+		newStatus = TrackNeedsReview
+		track.Selected = false
 	}
 
-	log.Printf("[sync] session %s: track %d manual search found: %s - %s", sessionID, trackIndex, match.Artist, match.Title)
+	track.Status = newStatus
+	p.updateProgressForStatusChange(session, prevStatus, newStatus, false)
+
+	log.Printf("[sync] session %s: track %d manual search found: %s - %s (status: %s)", sessionID, trackIndex, match.Artist, match.Title, newStatus)
 	return nil
+}
+
+// updateProgressForStatusChange adjusts session progress counters when a track status changes.
+// Must be called with p.mu held.
+func (p *Pipeline) updateProgressForStatusChange(session *Session, oldStatus, newStatus string, wasSelected bool) {
+	if oldStatus == newStatus {
+		return
+	}
+
+	// Decrement old status counter.
+	switch oldStatus {
+	case TrackNotFound:
+		session.Progress.NotFound--
+	case TrackNeedsReview:
+		session.Progress.NeedsReview--
+	case TrackSkipped:
+		session.Progress.Skipped--
+	}
+	if wasSelected {
+		session.Progress.Selected--
+	}
+
+	// Increment new status counter.
+	switch newStatus {
+	case TrackNotFound:
+		session.Progress.NotFound++
+	case TrackNeedsReview:
+		session.Progress.NeedsReview++
+	case TrackSkipped:
+		session.Progress.Skipped++
+	}
 }

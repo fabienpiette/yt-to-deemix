@@ -894,11 +894,8 @@
           if (currentTracks[i]._sessionId === sid && currentTracks[i]._originalIndex === index) {
             currentTracks[i].deezer_match = data.deezer_match;
             currentTracks[i].confidence = data.confidence;
-            // Update status based on confidence
-            if (data.deezer_match) {
-              currentTracks[i].status = data.confidence >= 70 ? "found" : "needs_review";
-              currentTracks[i].selected = data.confidence >= 70;
-            }
+            currentTracks[i].status = data.status;
+            currentTracks[i].selected = data.selected;
             break;
           }
         }

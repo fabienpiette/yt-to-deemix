@@ -339,7 +339,9 @@ type searchResponse struct {
 		Artist string `json:"artist"`
 		Link   string `json:"link"`
 	} `json:"deezer_match,omitempty"`
-	Confidence int `json:"confidence"`
+	Confidence int    `json:"confidence"`
+	Status     string `json:"status"`
+	Selected   bool   `json:"selected"`
 }
 
 func handleSearchTrack(pipeline *sync.Pipeline) http.HandlerFunc {
@@ -380,7 +382,11 @@ func handleSearchTrack(pipeline *sync.Pipeline) http.HandlerFunc {
 		session, _ := pipeline.GetSession(sessionID)
 		track := session.Tracks[index]
 
-		resp := searchResponse{Confidence: track.Confidence}
+		resp := searchResponse{
+			Confidence: track.Confidence,
+			Status:     track.Status,
+			Selected:   track.Selected,
+		}
 		if track.DeezerMatch != nil {
 			resp.DeezerMatch = &struct {
 				ID     int64  `json:"id"`
