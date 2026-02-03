@@ -695,6 +695,23 @@ footer {
   vertical-align: -2px;
 }
 
+.star-btn {
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+
+.star-btn:hover {
+  color: #f0a500;
+  border-color: #f0a500;
+  background: rgba(240, 165, 0, 0.1);
+}
+
 @media (max-width: 640px) {
   .add-form,
   .sync-options {

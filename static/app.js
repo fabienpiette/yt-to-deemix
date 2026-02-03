@@ -25,7 +25,9 @@
   var trackBody = document.getElementById("trackBody");
   var selectAllCheckbox = document.getElementById("selectAll");
   var themeToggle = document.getElementById("themeToggle");
-  var statsEl = document.getElementById("stats");
+  var versionEl = document.getElementById("version");
+  var resourcesEl = document.getElementById("resources");
+  var uptimeEl = document.getElementById("uptime");
 
   var urlQueue = [];
   var pollTimer = null;
@@ -1051,9 +1053,9 @@
     fetch("/api/stats")
       .then(function (resp) { return resp.json(); })
       .then(function (data) {
-        var mem = data.memory_mb.toFixed(1);
-        var uptime = formatUptime(data.uptime_sec);
-        statsEl.textContent = data.version + " \u00b7 " + mem + " MB \u00b7 " + data.goroutines + " goroutines \u00b7 up " + uptime;
+        versionEl.textContent = data.version;
+        resourcesEl.textContent = data.memory_mb.toFixed(1) + " MB";
+        uptimeEl.textContent = formatUptime(data.uptime_sec);
       })
       .catch(function () {});
   }
