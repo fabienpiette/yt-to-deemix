@@ -45,6 +45,7 @@ type subsonicSong struct {
 
 func (c *HTTPClient) Search(ctx context.Context, artist, title string) ([]SearchResult, error) {
 	query := artist + " " + title
+	log.Printf("[navidrome] checking library: %s - %s", artist, title)
 	params := url.Values{
 		"query":     {query},
 		"songCount": {"5"},
@@ -109,6 +110,10 @@ func (c *HTTPClient) Search(ctx context.Context, artist, title string) ([]Search
 				Duration: song.Duration,
 			})
 		}
+	}
+
+	if len(results) > 0 {
+		log.Printf("[navidrome] found in library: %s - %s", artist, title)
 	}
 
 	return results, nil

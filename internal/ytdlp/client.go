@@ -29,6 +29,7 @@ func NewClient() *CommandClient {
 
 // GetPlaylist fetches all video entries from a YouTube playlist URL.
 func (c *CommandClient) GetPlaylist(ctx context.Context, playlistURL string) ([]PlaylistEntry, error) {
+	log.Printf("[ytdlp] fetching playlist: %s", playlistURL)
 	bin := c.BinaryPath
 	if bin == "" {
 		bin = "yt-dlp"
@@ -47,7 +48,12 @@ func (c *CommandClient) GetPlaylist(ctx context.Context, playlistURL string) ([]
 	}
 	args = append(args, playlistURL)
 
-	return c.runYtdlp(ctx, bin, args, playlistURL)
+	entries, err := c.runYtdlp(ctx, bin, args, playlistURL)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("[ytdlp] fetched %d entries from playlist", len(entries))
+	return entries, nil
 }
 
 // getYouTubeMusicPlaylist fetches YouTube Music playlists with full metadata.
@@ -130,6 +136,7 @@ func isYouTubeMusicURL(url string) bool {
 
 // GetChannelPlaylists fetches all playlist URLs from a YouTube channel.
 func (c *CommandClient) GetChannelPlaylists(ctx context.Context, channelURL string) ([]ChannelPlaylist, error) {
+	log.Printf("[ytdlp] fetching channel playlists: %s", channelURL)
 	bin := c.BinaryPath
 	if bin == "" {
 		bin = "yt-dlp"
@@ -174,11 +181,13 @@ func (c *CommandClient) GetChannelPlaylists(ctx context.Context, channelURL stri
 		}
 	}
 
+	log.Printf("[ytdlp] found %d playlists on channel", len(playlists))
 	return playlists, nil
 }
 
 // GetURLInfo fetches the title for a YouTube URL (playlist or video).
 func (c *CommandClient) GetURLInfo(ctx context.Context, url string) (string, error) {
+	log.Printf("[ytdlp] fetching URL info: %s", url)
 	bin := c.BinaryPath
 	if bin == "" {
 		bin = "yt-dlp"
@@ -203,6 +212,7 @@ func (c *CommandClient) GetURLInfo(ctx context.Context, url string) (string, err
 		return "", fmt.Errorf("failed to parse yt-dlp output: %w", err)
 	}
 
+	log.Printf("[ytdlp] URL title: %s", info.Title)
 	return info.Title, nil
 }
 

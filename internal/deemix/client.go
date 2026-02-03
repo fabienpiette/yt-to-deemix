@@ -39,6 +39,7 @@ func NewClient(baseURL, arl string) *HTTPClient {
 
 // Login authenticates with the Deemix instance using the ARL token.
 func (c *HTTPClient) Login(ctx context.Context) error {
+	log.Printf("[deemix] logging in to %s", c.BaseURL)
 	body, _ := json.Marshal(map[string]string{"arl": c.ARL})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/api/loginArl", bytes.NewReader(body))
 	if err != nil {
@@ -48,12 +49,14 @@ func (c *HTTPClient) Login(ctx context.Context) error {
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		log.Printf("[deemix] login request failed: %v", err)
 		return fmt.Errorf("login request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
+		log.Printf("[deemix] login failed (status %d): %s", resp.StatusCode, string(respBody))
 		return fmt.Errorf("login failed (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
@@ -64,14 +67,17 @@ func (c *HTTPClient) Login(ctx context.Context) error {
 		return fmt.Errorf("decoding login response: %w", err)
 	}
 	if result.Status == 0 {
+		log.Printf("[deemix] login failed: invalid ARL token")
 		return fmt.Errorf("login failed: invalid ARL token")
 	}
 
+	log.Printf("[deemix] login successful")
 	return nil
 }
 
 // Search queries Deemix for tracks matching the given query string.
 func (c *HTTPClient) Search(ctx context.Context, query string) ([]SearchResult, error) {
+	log.Printf("[deemix] searching: %s", query)
 	endpoint := c.BaseURL + "/api/search?" + url.Values{
 		"term": {query},
 		"type": {"track"},
@@ -129,11 +135,13 @@ func (c *HTTPClient) Search(ctx context.Context, query string) ([]SearchResult, 
 		}
 	}
 
+	log.Printf("[deemix] search found %d results for: %s", len(results), query)
 	return results, nil
 }
 
 // AddToQueue adds a track to the Deemix download queue.
 func (c *HTTPClient) AddToQueue(ctx context.Context, deezerURL string, bitrate int) error {
+	log.Printf("[deemix] adding to queue: %s (bitrate: %d)", deezerURL, bitrate)
 	body, _ := json.Marshal(map[string]interface{}{
 		"url":     deezerURL,
 		"bitrate": bitrate,
@@ -158,5 +166,6 @@ func (c *HTTPClient) AddToQueue(ctx context.Context, deezerURL string, bitrate i
 		return fmt.Errorf("queue failed (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
+	log.Printf("[deemix] queued successfully: %s", deezerURL)
 	return nil
 }
