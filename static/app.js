@@ -344,7 +344,7 @@
       "not_found": 1,
       "error": 2,
       "found": 3,
-      "queued": 4,
+      "downloaded": 4,
       "skipped": 5,
       "searching": 6,
       "pending": 7
@@ -819,7 +819,7 @@
       checkbox.checked = t.selected;
       checkbox.dataset.index = t._originalIndex !== undefined ? t._originalIndex : i;
       checkbox.dataset.sid = trackSid;
-      checkbox.disabled = !editable || t.status === "queued";
+      checkbox.disabled = !editable || t.status === "downloaded";
       checkbox.addEventListener("change", function () {
         toggleTrackSelection(this.dataset.sid, parseInt(this.dataset.index, 10), this.checked);
       });
@@ -923,12 +923,13 @@
         return resp.json();
       })
       .then(function () {
-        // Update the selected count
-        totalProgress.selected += selected ? 1 : -1;
-        countSelected.textContent = totalProgress.selected;
-        // Update the track in currentTracks
+        // Update the track in currentTracks and adjust count only if state changed
         for (var i = 0; i < currentTracks.length; i++) {
           if (currentTracks[i]._sessionId === sid && currentTracks[i]._originalIndex === index) {
+            if (currentTracks[i].selected !== selected) {
+              totalProgress.selected += selected ? 1 : -1;
+              countSelected.textContent = totalProgress.selected;
+            }
             currentTracks[i].selected = selected;
             break;
           }
@@ -1012,7 +1013,7 @@
     switch (status) {
       case "searching": return "\u22EF";
       case "found": return "\u2713";
-      case "queued": return "\u2713\u2713";
+      case "downloaded": return "\u2B07";
       case "skipped": return "\u2205";
       case "needs_review": return "?";
       case "not_found": return "\u2717";
@@ -1025,7 +1026,7 @@
     switch (status) {
       case "searching": return "Searching...";
       case "found": return "Found on Deezer";
-      case "queued": return "Queued for download";
+      case "downloaded": return "Downloaded";
       case "skipped": return "Already in library";
       case "needs_review": return "Low confidence - review match";
       case "not_found": return "Not found on Deezer";

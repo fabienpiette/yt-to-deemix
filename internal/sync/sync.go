@@ -458,7 +458,7 @@ func (p *Pipeline) Download(ctx context.Context, sessionID string) error {
 		if err != nil {
 			session.Tracks[i].Status = TrackError
 		} else {
-			session.Tracks[i].Status = TrackQueued
+			session.Tracks[i].Status = TrackDownloaded
 			session.Progress.Queued++
 		}
 		p.mu.Unlock()

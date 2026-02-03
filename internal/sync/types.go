@@ -74,6 +74,6 @@ const (
 	TrackNotFound    = "not_found"
 	TrackSkipped     = "skipped"
 	TrackNeedsReview = "needs_review"
-	TrackQueued      = "queued"
+	TrackDownloaded  = "downloaded"
 	TrackError       = "error"
 )

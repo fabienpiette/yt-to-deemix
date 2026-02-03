@@ -141,11 +141,11 @@ func TestPipelineAnalyzeAndDownload(t *testing.T) {
 	}
 
 	// Check track states after download.
-	if session.Tracks[0].Status != TrackQueued {
-		t.Errorf("track[0] status = %q, want 'queued'", session.Tracks[0].Status)
+	if session.Tracks[0].Status != TrackDownloaded {
+		t.Errorf("track[0] status = %q, want 'downloaded'", session.Tracks[0].Status)
 	}
-	if session.Tracks[2].Status != TrackQueued {
-		t.Errorf("track[2] status = %q, want 'queued'", session.Tracks[2].Status)
+	if session.Tracks[2].Status != TrackDownloaded {
+		t.Errorf("track[2] status = %q, want 'downloaded'", session.Tracks[2].Status)
 	}
 
 	// Check queued URLs.
