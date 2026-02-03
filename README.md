@@ -160,53 +160,7 @@ make fmt            # Check formatting
 make build-all      # Cross-compile for all platforms
 ```
 
-Static assets (CSS, JS, SVG) are embedded in the binary and minified + gzipped at startup (~85% size reduction). Use `make dev` during development to serve files from disk without rebuilding.
-
-## API
-
-### Session workflow
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/analyze` | Start analysis. Body: `{"url": "...", "bitrate": 1, "check_navidrome": false}` |
-| GET | `/api/session/{id}` | Get session state (tracks, progress, status) |
-| POST | `/api/session/{id}/download` | Start downloading selected tracks |
-| POST | `/api/session/{id}/pause` | Pause the current operation |
-| POST | `/api/session/{id}/resume` | Resume a paused session |
-| POST | `/api/session/{id}/cancel` | Cancel the session |
-
-### Track operations
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/session/{id}/track/{index}/select` | Select/deselect track. Body: `{"selected": true}` |
-| POST | `/api/session/{id}/track/{index}/search` | Re-search track. Body: `{"query": "artist song"}` |
-
-### Utilities
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/channel/playlists?url=...` | Get all playlists from a YouTube channel |
-| GET | `/api/url/info?url=...` | Get title for a YouTube URL |
-| GET | `/api/stats` | Server stats (memory, goroutines, uptime) |
-| GET | `/api/navidrome/status` | Navidrome integration status |
-
-**Bitrate values:** `9` (FLAC), `3` (320 kbps), `1` (128 kbps)
-
-## Session statuses
-
-| Status | Description |
-|--------|-------------|
-| `fetching` | Fetching playlist metadata from YouTube |
-| `parsing` | Parsing video titles to extract artist/song |
-| `searching` | Searching tracks on Deezer |
-| `checking` | Checking Navidrome for existing tracks |
-| `ready` | Analysis complete, waiting for user action |
-| `downloading` | Queuing tracks to Deemix |
-| `done` | All selected tracks queued |
-| `paused` | Operation paused by user |
-| `canceled` | Session canceled by user |
-| `error` | An error occurred |
+Static assets (CSS, JS, SVG) are embedded in the binary and minified + gzipped at startup. Use `make dev` during development to serve files from disk without rebuilding.
 
 ## Track statuses
 
@@ -218,8 +172,8 @@ Static assets (CSS, JS, SVG) are embedded in the binary and minified + gzipped a
 | `needs_review` | Match found but low confidence (not auto-selected) |
 | `not_found` | No match found on Deezer |
 | `skipped` | Already exists in Navidrome |
-| `queued` | Successfully queued in Deemix |
-| `error` | Failed to queue |
+| `downloaded` | Successfully sent to Deemix |
+| `error` | Failed to download |
 
 ## Navidrome integration
 
