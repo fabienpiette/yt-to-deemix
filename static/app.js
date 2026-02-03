@@ -39,6 +39,9 @@
   var totalProgress = { searched: 0, selected: 0, queued: 0, skipped: 0, needs_review: 0, not_found: 0, total: 0 };
   var sortColumn = null;
   var sortAsc = true;
+  var activeFilter = "all";
+  var filterTabs = document.getElementById("filterTabs");
+  var emptyState = document.getElementById("emptyState");
 
   // Theme toggle.
   var savedTheme = localStorage.getItem("theme") || "light";
@@ -238,6 +241,61 @@
     }
   }
 
+  // Filter tabs click handler.
+  filterTabs.addEventListener("click", function (e) {
+    if (!e.target.classList.contains("filter-tab")) return;
+    var filter = e.target.dataset.filter;
+    if (filter === activeFilter) return;
+
+    activeFilter = filter;
+    var tabs = filterTabs.querySelectorAll(".filter-tab");
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle("active", tabs[i].dataset.filter === filter);
+    }
+    if (currentTracks.length > 0) {
+      renderTracks(sortTracks(currentTracks), null, isReady);
+    }
+  });
+
+  function filterTracks(tracks) {
+    if (activeFilter === "all") return tracks;
+    return tracks.filter(function (t) {
+      return t.status === activeFilter;
+    });
+  }
+
+  function updateTabCounts() {
+    var counts = { all: currentTracks.length };
+    for (var i = 0; i < currentTracks.length; i++) {
+      var status = currentTracks[i].status;
+      counts[status] = (counts[status] || 0) + 1;
+    }
+    var tabs = filterTabs.querySelectorAll(".filter-tab");
+    for (var i = 0; i < tabs.length; i++) {
+      var tab = tabs[i];
+      var filter = tab.dataset.filter;
+      var count = counts[filter] || 0;
+      var countSpan = tab.querySelector(".tab-count");
+      if (!countSpan) {
+        countSpan = document.createElement("span");
+        countSpan.className = "tab-count";
+        tab.appendChild(countSpan);
+      }
+      countSpan.textContent = "(" + count + ")";
+    }
+  }
+
+  function resetFilterTabs() {
+    var tabs = filterTabs.querySelectorAll(".filter-tab");
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle("active", tabs[i].dataset.filter === "all");
+      var countSpan = tabs[i].querySelector(".tab-count");
+      if (countSpan) countSpan.textContent = "(0)";
+    }
+    trackTable.style.display = "";
+    emptyState.classList.remove("active");
+  }
+
   function sortTracks(tracks) {
     if (!sortColumn) return tracks;
 
@@ -318,7 +376,9 @@
     totalProgress = { searched: 0, selected: 0, queued: 0, skipped: 0, needs_review: 0, not_found: 0, total: 0 };
     sortColumn = null;
     sortAsc = true;
+    activeFilter = "all";
     updateSortIndicators();
+    resetFilterTabs();
     downloadBtn.classList.remove("active");
     downloadBtn.disabled = true;
     addBtn.disabled = true;
@@ -731,9 +791,21 @@
 
   function renderTracks(tracks, sid, editable) {
     clearElement(trackBody);
-    for (var i = 0; i < tracks.length; i++) {
+    updateTabCounts();
+    var filtered = filterTracks(tracks);
+
+    // Show empty state when filter has no results
+    if (filtered.length === 0 && tracks.length > 0) {
+      trackTable.style.display = "none";
+      emptyState.classList.add("active");
+    } else {
+      trackTable.style.display = "";
+      emptyState.classList.remove("active");
+    }
+
+    for (var i = 0; i < filtered.length; i++) {
       var tr = document.createElement("tr");
-      var t = tracks[i];
+      var t = filtered[i];
       var trackSid = t._sessionId || sid;
 
       // Checkbox column

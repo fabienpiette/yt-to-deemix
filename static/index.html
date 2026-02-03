@@ -49,6 +49,15 @@
     </div>
 
     <div class="track-container" id="trackContainer">
+      <div class="filter-tabs" id="filterTabs">
+        <button class="filter-tab active" data-filter="all">All</button>
+        <button class="filter-tab" data-filter="needs_review">Review</button>
+        <button class="filter-tab" data-filter="found">Found</button>
+        <button class="filter-tab" data-filter="not_found">Not Found</button>
+        <button class="filter-tab" data-filter="skipped">Skipped</button>
+        <button class="filter-tab" data-filter="queued">Queued</button>
+        <button class="filter-tab" data-filter="error">Error</button>
+      </div>
       <table class="track-table" id="trackTable">
         <thead>
           <tr>
@@ -61,6 +70,7 @@
         </thead>
         <tbody id="trackBody"></tbody>
       </table>
+      <div class="empty-state" id="emptyState">No tracks match this filter</div>
     </div>
 
     <footer>
