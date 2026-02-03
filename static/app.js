@@ -840,11 +840,22 @@
       tdTitle.title = t.youtube_title;
 
       var tdMatched = document.createElement("td");
-      if (t.parsed_artist) {
-        tdMatched.textContent = t.parsed_artist + " - " + t.parsed_song;
-      } else {
-        tdMatched.textContent = t.parsed_song;
-      }
+      tdMatched.className = "matched-as";
+      var matchedText = t.parsed_artist ? t.parsed_artist + " - " + t.parsed_song : t.parsed_song;
+      var matchedSpan = document.createElement("span");
+      matchedSpan.className = "matched-text";
+      matchedSpan.textContent = matchedText;
+      tdMatched.appendChild(matchedSpan);
+
+      var copyBtn = document.createElement("button");
+      copyBtn.className = "copy-btn";
+      copyBtn.textContent = "\u2398";
+      copyBtn.title = "Copy to clipboard";
+      copyBtn.dataset.text = matchedText;
+      copyBtn.addEventListener("click", function () {
+        copyToClipboard(this.dataset.text, this);
+      });
+      tdMatched.appendChild(copyBtn);
 
       var tdResult = document.createElement("td");
       tdResult.className = "deezer-result";
@@ -1026,6 +1037,33 @@
     while (el.firstChild) {
       el.removeChild(el.firstChild);
     }
+  }
+
+  function copyToClipboard(text, btn) {
+    navigator.clipboard.writeText(text).then(function () {
+      btn.classList.add("copied");
+      btn.textContent = "\u2713";
+      setTimeout(function () {
+        btn.classList.remove("copied");
+        btn.textContent = "\u2398";
+      }, 1500);
+    }).catch(function () {
+      // Fallback for older browsers
+      var textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      btn.classList.add("copied");
+      btn.textContent = "\u2713";
+      setTimeout(function () {
+        btn.classList.remove("copied");
+        btn.textContent = "\u2398";
+      }, 1500);
+    });
   }
 
   function resetCounts() {

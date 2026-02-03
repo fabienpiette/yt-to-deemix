@@ -615,6 +615,41 @@ input#selectAll:indeterminate::after {
   color: var(--muted);
 }
 
+.matched-as {
+  position: relative;
+}
+
+.matched-text {
+  margin-right: 0.3rem;
+}
+
+.copy-btn {
+  padding: 0.1rem 0.3rem;
+  font-size: 0.7rem;
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.matched-as:hover .copy-btn {
+  opacity: 1;
+}
+
+.copy-btn:hover {
+  color: var(--fg);
+  border-color: var(--fg);
+}
+
+.copy-btn.copied {
+  opacity: 1;
+  color: #2a2;
+  border-color: #2a2;
+}
+
 .deezer-result .search-input {
   width: 100%;
   max-width: 200px;
