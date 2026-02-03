@@ -43,6 +43,7 @@
   var sortAsc = true;
   var activeFilter = "all";
   var filterTabs = document.getElementById("filterTabs");
+  var previousTabCounts = {};
   var emptyState = document.getElementById("emptyState");
 
   // Theme toggle.
@@ -277,6 +278,7 @@
       var tab = tabs[i];
       var filter = tab.dataset.filter;
       var count = counts[filter] || 0;
+      var prevCount = previousTabCounts[filter] || 0;
       var countSpan = tab.querySelector(".tab-count");
       if (!countSpan) {
         countSpan = document.createElement("span");
@@ -284,7 +286,23 @@
         tab.appendChild(countSpan);
       }
       countSpan.textContent = "(" + count + ")";
+
+      // Visual feedback when count changes
+      if (prevCount !== count && Object.keys(previousTabCounts).length > 0) {
+        countSpan.classList.remove("count-increase", "count-decrease");
+        if (count > prevCount) {
+          countSpan.classList.add("count-increase");
+        } else {
+          countSpan.classList.add("count-decrease");
+        }
+        setTimeout(function (span) {
+          return function () {
+            span.classList.remove("count-increase", "count-decrease");
+          };
+        }(countSpan), 2000);
+      }
     }
+    previousTabCounts = counts;
   }
 
   function resetFilterTabs() {
@@ -296,6 +314,7 @@
     }
     trackTable.style.display = "";
     emptyState.classList.remove("active");
+    previousTabCounts = {};
   }
 
   function sortTracks(tracks) {
