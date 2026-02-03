@@ -615,6 +615,12 @@ input#selectAll:indeterminate::after {
   color: var(--muted);
 }
 
+.col-confidence {
+  text-align: center;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
 .matched-as {
   position: relative;
 }

@@ -861,9 +861,6 @@
       tdResult.className = "deezer-result";
       if (t.deezer_match) {
         var resultText = t.deezer_match.artist + " - " + t.deezer_match.title;
-        if (t.confidence > 0) {
-          resultText += " (" + t.confidence + "%)";
-        }
         var matchSpan = document.createElement("span");
         matchSpan.className = "match-text";
         matchSpan.textContent = resultText;
@@ -889,6 +886,14 @@
         tdResult.textContent = "\u2014";
       }
 
+      var tdConfidence = document.createElement("td");
+      tdConfidence.className = "col-confidence";
+      if (t.confidence > 0) {
+        tdConfidence.textContent = t.confidence + "%";
+      } else {
+        tdConfidence.textContent = "\u2014";
+      }
+
       var tdStatus = document.createElement("td");
       tdStatus.className = "status-icon status-" + t.status;
       tdStatus.textContent = statusIcon(t.status);
@@ -898,6 +903,7 @@
       tr.appendChild(tdTitle);
       tr.appendChild(tdMatched);
       tr.appendChild(tdResult);
+      tr.appendChild(tdConfidence);
       tr.appendChild(tdStatus);
       trackBody.appendChild(tr);
     }
