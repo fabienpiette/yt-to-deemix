@@ -1066,30 +1066,36 @@
   }
 
   function copyToClipboard(text, btn) {
-    navigator.clipboard.writeText(text).then(function () {
+    function showSuccess() {
       btn.classList.add("copied");
       btn.textContent = "\u2713";
       setTimeout(function () {
         btn.classList.remove("copied");
         btn.textContent = "\u2398";
       }, 1500);
-    }).catch(function () {
-      // Fallback for older browsers
+    }
+
+    function fallbackCopy() {
       var textarea = document.createElement("textarea");
       textarea.value = text;
       textarea.style.position = "fixed";
       textarea.style.opacity = "0";
       document.body.appendChild(textarea);
       textarea.select();
-      document.execCommand("copy");
+      try {
+        document.execCommand("copy");
+        showSuccess();
+      } catch (e) {
+        // Silent fail
+      }
       document.body.removeChild(textarea);
-      btn.classList.add("copied");
-      btn.textContent = "\u2713";
-      setTimeout(function () {
-        btn.classList.remove("copied");
-        btn.textContent = "\u2398";
-      }, 1500);
-    });
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(showSuccess).catch(fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
   }
 
   function resetCounts() {
