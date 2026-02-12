@@ -5,7 +5,7 @@ Transfer YouTube playlists, songs, and channels to a self-hosted Deemix instance
 ---
 
 <p align="center">
-  <img src="docs/demo-light.gif" alt="ytToDeemix dashboard showing playlist sync results" width="600">
+  <img src="docs/demo.gif" alt="ytToDeemix dashboard showing playlist sync results" width="600">
 </p>
 
 ## Quick Start
