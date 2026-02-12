@@ -1,47 +1,14 @@
 # ytToDeemix
 
-Transfer music from YouTube to a self-hosted Deemix instance. Works with playlists, single songs, and entire channels.
+Transfer YouTube playlists, songs, and channels to a self-hosted Deemix instance.
 
-You have a YouTube playlist or a song link. You want those tracks on your server. This bridges the gap: it reads the URL, figures out what each video is, finds the matching track on Deezer, and queues it for download through your existing Deemix setup.
-
-[![License: AGPL-3.0](https://img.shields.io/github/license/fabienpiette/yt-to-deemix)](LICENSE)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/fabienpiette/yt-to-deemix)](go.mod)
-[![Tag](https://img.shields.io/github/v/tag/fabienpiette/yt-to-deemix)](https://github.com/fabienpiette/yt-to-deemix/tags)
-
-![ytToDeemix dashboard showing playlist sync results](docs/screenshot-light.gif)
+---
 
 <p align="center">
-<a href="https://buymeacoffee.com/fabienpiette" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="60"></a>
+  <img src="docs/demo-light.gif" alt="ytToDeemix dashboard showing playlist sync results" width="600">
 </p>
 
-## Features
-
-- **Queue multiple URLs** - Add playlists and songs to a queue before processing
-- **Channel import** - Paste a YouTube channel URL to import all its playlists at once
-- **Two-phase workflow** - Analyze first, review matches, then download selected tracks
-- **Manual track selection** - Select/deselect individual tracks before downloading
-- **Confidence scoring** - Low-confidence matches are flagged for manual review
-- **Re-search tracks** - Search again with a custom query if the match is wrong
-- **Pause/Resume/Cancel** - Full control over analyze and download operations
-- **Navidrome integration** - Skip tracks already in your library
-- **Dark/Light theme** - Toggle in the UI header
-- **Optimized delivery** - Static assets are embedded, minified, and gzip-compressed
-
-## How it works
-
-1. Add YouTube URLs to the queue (playlists, songs, or channels)
-2. Click **Analyze** - yt-dlp fetches metadata, titles are parsed, Deezer matches are found
-3. Review the results - high-confidence matches are pre-selected, low-confidence flagged
-4. Adjust selections, re-search mismatches if needed
-5. Click **Download** - selected tracks are queued in Deemix at your chosen bitrate
-
-## Requirements
-
-- A running Deemix instance
-- A Deezer ARL token (grab from your browser cookies on deezer.com)
-- Docker (recommended) or Go 1.24+ and yt-dlp installed locally
-
-## Quick start
+## Quick Start
 
 ```bash
 cp .env.example .env
@@ -50,9 +17,22 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Open `http://localhost:8080` in your browser.
+Open `http://localhost:8080`. Paste a YouTube URL, click **Analyze**, review the matches, click **Download**.
 
-## Deploy with Docker Compose
+## Features
+
+- **Queue multiple URLs** — playlists, songs, and entire channels in one go
+- **Two-phase workflow** — analyze first, review matches, then download
+- **Confidence scoring** — low-confidence matches flagged for manual review
+- **Re-search tracks** — fix wrong matches with a custom search query
+- **Pause / Resume / Cancel** — full control over operations
+- **Navidrome integration** — skip tracks already in your library
+
+## Install
+
+**Prerequisites:** a running [Deemix](https://github.com/bambanah/deemix) instance and a [Deezer ARL token](https://www.google.com/search?q=deezer+arl+token).
+
+### Docker Compose
 
 ```yaml
 services:
@@ -62,21 +42,11 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - DEEMIX_URL=http://deemix:6595 # Deemix instance URL (required)
-      - DEEMIX_ARL=your_arl_token_here # Deezer ARL token for authentication (required)
-      # Optional:
-      # - PORT=8080 # Web server port (optional, default: 8080)
-      # - CONFIDENCE_THRESHOLD=70 # Confidence threshold for auto-queuing (optional, default: 70)
-      #
-      # Navidrome / Subsonic integration (optional)
-      # - NAVIDROME_URL=http://navidrome:4533
-      # - NAVIDROME_USER=admin
-      # - NAVIDROME_PASSWORD=secret
-      # - NAVIDROME_MATCH_MODE=substring # Match mode: "substring" (default), "exact", or "fuzzy" (Levenshtein similarity >= 80%)
-      # - NAVIDROME_SKIP_DEFAULT=false # Enable "skip existing" toggle by default (optional, default: false)
+      - DEEMIX_URL=http://deemix:6595
+      - DEEMIX_ARL=your_arl_token_here
 ```
 
-### Full stack example (with Deemix and Navidrome)
+### Full stack (with Deemix and Navidrome)
 
 ```yaml
 services:
@@ -125,108 +95,74 @@ services:
       - ./navidrome-data:/data
 ```
 
+### From source
+
+```bash
+pip install yt-dlp  # dependency
+make run
+```
+
 ## Configuration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DEEMIX_URL` | yes | `http://localhost:6595` | Your Deemix instance URL |
-| `DEEMIX_ARL` | yes | - | Deezer ARL authentication token |
+| `DEEMIX_URL` | yes | `http://localhost:6595` | Deemix instance URL |
+| `DEEMIX_ARL` | yes | — | Deezer ARL token |
 | `PORT` | no | `8080` | Web server port |
-| `CONFIDENCE_THRESHOLD` | no | `70` | Minimum confidence score (0-100) for auto-selection |
-| `NAVIDROME_URL` | no | - | Navidrome/Subsonic instance URL |
-| `NAVIDROME_USER` | no | - | Navidrome username |
-| `NAVIDROME_PASSWORD` | no | - | Navidrome password |
-| `NAVIDROME_MATCH_MODE` | no | `substring` | How to match tracks: `substring`, `exact`, or `fuzzy` |
-| `NAVIDROME_SKIP_DEFAULT` | no | `false` | Enable "skip existing" toggle by default in UI |
-| `DEV` | no | - | Set to `1` to serve static files from disk (development) |
+| `CONFIDENCE_THRESHOLD` | no | `70` | Auto-selection threshold (0–100) |
+| `NAVIDROME_URL` | no | — | Navidrome/Subsonic URL |
+| `NAVIDROME_USER` | no | — | Navidrome username |
+| `NAVIDROME_PASSWORD` | no | — | Navidrome password |
+| `NAVIDROME_MATCH_MODE` | no | `substring` | `substring`, `exact`, or `fuzzy` |
+| `NAVIDROME_SKIP_DEFAULT` | no | `false` | Enable "skip existing" by default |
+| `DEV` | no | — | `1` to serve static files from disk |
 
-## Running locally
+## Usage
 
-```bash
-# Install yt-dlp if you don't have it
-pip install yt-dlp
+### Channel import
 
-# Build and run
-make run
+Paste a YouTube channel URL to import all its public playlists at once:
+
 ```
+youtube.com/@username
+youtube.com/channel/UCxxxxx
+youtube.com/c/channelname
+```
+
+### Navidrome integration
+
+When all three `NAVIDROME_*` connection variables are set, a "skip existing" toggle appears in the UI. Uses the Subsonic `search2` API, so it works with any Subsonic-compatible server.
+
+| Match mode | Behaviour |
+|------------|-----------|
+| `substring` | Title/artist contained in the entry (case-insensitive). Catches "(Remastered)" variants. |
+| `exact` | Exact match (case-insensitive). |
+| `fuzzy` | Levenshtein similarity ≥ 80%. Tolerates minor typos. |
+
+### Confidence scoring
+
+Each Deezer match gets a score (0–100%) — 40% artist similarity, 60% title similarity. Tracks below the threshold are flagged for review instead of auto-selected. If no artist was parsed, confidence is capped at 60%.
 
 ## Development
 
 ```bash
-make dev            # Run with live reload (serves static files from disk)
-make test           # Run tests with race detector
-make test-coverage  # Run tests with coverage report
+make dev            # Live reload (serves static from disk)
+make test           # Tests with race detector
+make test-coverage  # Coverage report
 make fmt            # Check formatting
 make build-all      # Cross-compile for all platforms
 ```
 
-Static assets (CSS, JS, SVG) are embedded in the binary and minified + gzipped at startup. Use `make dev` during development to serve files from disk without rebuilding.
+Static assets are embedded in the binary and minified + gzipped at startup.
 
-## Track statuses
+## Acknowledgments
 
-| Status | Description |
-|--------|-------------|
-| `pending` | Waiting to be processed |
-| `searching` | Currently searching on Deezer |
-| `found` | Match found with high confidence (auto-selected) |
-| `needs_review` | Match found but low confidence (not auto-selected) |
-| `not_found` | No match found on Deezer |
-| `skipped` | Already exists in Navidrome |
-| `downloaded` | Successfully sent to Deemix |
-| `error` | Failed to download |
+Thanks to all [contributors](https://github.com/fabienpiette/quaycheck/graphs/contributors).
 
-## Navidrome integration
-
-When configured, ytToDeemix can check your Navidrome library before downloading, skipping tracks you already have. It uses the Subsonic API (`search2` endpoint), so it works with any Subsonic-compatible server.
-
-All three `NAVIDROME_*` connection variables must be set to enable this feature. When enabled, a "skip existing" toggle appears in the UI.
-
-**Match modes:**
-
-| Mode | Behaviour |
-|------|-----------|
-| `substring` | Title and artist are contained within the Navidrome entry (case-insensitive). Catches variants like "(Remastered)". |
-| `exact` | Title and artist must match exactly (case-insensitive). Strictest mode. |
-| `fuzzy` | Levenshtein similarity >= 80%. Tolerates minor typos or punctuation differences. |
-
-## Confidence scoring
-
-Each Deezer match is assigned a confidence score (0-100%) based on how well the artist and title match the parsed YouTube title.
-
-- **High confidence** (≥70% by default): Auto-selected for download
-- **Low confidence** (<70%): Flagged for review, not auto-selected
-
-This prevents incorrect downloads when the parser extracts the wrong artist. For example, "I'm Alive" without artist info might match Céline Dion instead of Anthrax - the confidence score catches this.
-
-**Scoring formula:**
-- 40% weight on artist similarity
-- 60% weight on title similarity
-- If no artist was parsed, max confidence capped at 60%
-
-## Title parsing
-
-The parser handles common YouTube music title formats:
-
-- `Artist - Song`
-- `Artist - Song (Official Video)`
-- `Artist - Song [Lyrics]`
-- `Artist "Song Title"`
-- `Song by Artist`
-- Various noise: `[HD]`, `(Audio)`, `[MV]`, `(Visualizer)`, `(Official Lyric Video)`, etc.
-
-When parsing fails, the full cleaned title is used as the search query.
-
-## Channel import
-
-Paste a YouTube channel URL to fetch all its public playlists:
-
-- `youtube.com/@username`
-- `youtube.com/channel/UCxxxxx`
-- `youtube.com/c/channelname`
-- `youtube.com/user/username`
-
-The playlists appear in the queue with clickable links. Select which ones to include before analyzing.
+<p align="center">
+<a href="https://buymeacoffee.com/fabienpiette" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="60"></a>
+</p>
 
 ## License
 
-AGPL-3.0
+[AGPL-3.0](LICENSE)
